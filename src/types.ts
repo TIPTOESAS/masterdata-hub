@@ -8,6 +8,9 @@ export interface Variant {
   barcode: string;
   state: string;            // x_studio_product_state (dev/soon/prod/end_of_life/old)
   b2b: boolean;             // x_studio_saleable_in_wholesale (Available in b2b)
+  availQty: number;         // x_available_qty (Qté disponible 2.0)
+  nextSupplyQty: number;    // x_next_supply_qty (Qté prochaine appro 2.0)
+  nextSupplyDate: string;   // x_next_supply_date (Prochaine appro 2.0)
   price: number;            // lst_price
   cost: number;             // standard_price
   weight: number;

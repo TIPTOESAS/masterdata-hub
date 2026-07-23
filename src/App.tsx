@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
+import { jsPDF } from 'jspdf';
 import { onAuthChange, signOutUser } from './services/auth';
 import { fetchProducts, fetchBoms, writeOdoo } from './services/odoo';
 import { Product, Variant, Bom } from './types';
@@ -27,6 +28,8 @@ const Barcode: React.FC<{ value: string }> = ({ value }) => {
 
 const money = (v: number | null, cur = '€') =>
   v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+// Prix de vente affiché = toujours le Public Pricelist HT (fallback list_price si absent).
+const pubPrice = (v: { pricePublic: number | null; price: number }) => (v.pricePublic != null ? v.pricePublic : v.price);
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
 const TMPL_MAP: Record<string, string> = {
@@ -39,6 +42,7 @@ const VAR_MAP: Record<string, string> = {
   sku: 'default_code', barcode: 'barcode', cost: 'standard_price', weight: 'weight', volume: 'volume',
   dimVariant: 'x_studio_dimensions_variant', hsVariant: 'x_studio_hs_code_variant', diameter: 'x_studio_diameter',
   dimPacked: 'x_studio_dimensions_packed', flatpack: 'x_studio_flatpack', spidy: 'x_studio_gamme_famille_spidy',
+  b2b: 'x_studio_saleable_in_wholesale',
 };
 const NUMERIC = new Set(['price', 'cost', 'weight', 'volume', 'transport']);
 
@@ -181,7 +185,8 @@ const ProductsView: React.FC<{
   };
 
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
-    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui', barcode: p.barcode, price: p.price,
+    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui',
+    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
@@ -275,7 +280,7 @@ const ProductsView: React.FC<{
                       <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
                       <td className="dim">{p.dim || '—'}</td>
                       <td className="r"><span className="vcount">{vs.length}</span></td>
-                      <td className="r price">{money(p.price)}</td>
+                      <td className="r price">{money(vs.length ? pubPrice(vs[0]) : p.price)}</td>
                       <td><span className="st">
                         <span className={'dot ' + (p.active ? 'on' : 'off')} title={p.active ? 'Actif' : 'Archivé'}></span>
                         <span className={'dot ' + (p.saleOk ? 'sale' : 'off')} title="Vendable"></span>
@@ -292,7 +297,7 @@ const ProductsView: React.FC<{
                         <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
                         <td className="dim">{v.dimVariant || '—'}</td>
                         <td></td>
-                        <td className="r price">{money(v.price)}</td>
+                        <td className="r price">{money(pubPrice(v))}</td>
                         <td><span className="vopen">détail ›</span></td>
                       </tr>
                     ))}
@@ -421,7 +426,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
         )}
 
         {variant
-          ? <VariantBody variant={variant} fld={fld} product={product} hsOptions={hsOptions} />
+          ? <VariantBody variant={variant} fld={fld} tog={tog} product={product} hsOptions={hsOptions} />
           : (
             <>
               <div className="dtabs">{TABS.map(([k, l]) => (
@@ -514,7 +519,7 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
             <tr key={i} style={{ cursor: vs.length ? 'pointer' : 'default' }} onClick={() => vs.length && openVariant(i)}>
               <td><span className="swatch" style={{ background: colorFor(v.attr) || v.color || '#ccd1d8' }}></span>{v.attr}</td>
               <td className="code">{v.sku}</td><td className="code">{v.barcode || '—'}</td>
-              <td className="r price">{money(v.price)}</td>
+              <td className="r price">{money(pubPrice(v))}</td>
               <td className="r vopen">{vs.length ? 'détail ›' : ''}</td>
             </tr>))}</tbody></table>
       </>
@@ -526,8 +531,8 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
 };
 
 // ---- variant body: fields + pricing ----
-const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOptions: { value: string; label: string }[] }> = ({ variant: v, fld, product, hsOptions }) => {
-  const [vtab, setVtab] = useState<'fields' | 'pricing' | 'label'>('fields');
+const VariantBody: React.FC<{ variant: Variant; fld: any; tog: any; product: Product; hsOptions: { value: string; label: string }[] }> = ({ variant: v, fld, tog, product, hsOptions }) => {
+  const [vtab, setVtab] = useState<'fields' | 'pricing' | 'diffusion' | 'stock' | 'label'>('fields');
   const base = v.pricePublic;                                  // marge calculée sur le public HT
   const marginAbs = base != null ? base - v.cost : null;
   const marginPct = base ? Math.round((marginAbs! / base) * 1000) / 10 : null;
@@ -536,6 +541,8 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOp
       <div className="dtabs">
         <span className={'dtab' + (vtab === 'fields' ? ' on' : '')} onClick={() => setVtab('fields')}>Champs</span>
         <span className={'dtab' + (vtab === 'pricing' ? ' on' : '')} onClick={() => setVtab('pricing')}>Pricing</span>
+        <span className={'dtab' + (vtab === 'diffusion' ? ' on' : '')} onClick={() => setVtab('diffusion')}>Diffusion</span>
+        <span className={'dtab' + (vtab === 'stock' ? ' on' : '')} onClick={() => setVtab('stock')}>Stock</span>
         <span className={'dtab' + (vtab === 'label' ? ' on' : '')} onClick={() => setVtab('label')}>Étiquette</span>
       </div>
       <div className="dbody">
@@ -546,7 +553,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOp
               {fld('Référence interne', 'sku', v.sku, { hint: 'default_code' })}
               {fld('Code-barres (EAN)', 'barcode', v.barcode, { hint: 'barcode' })}
               {fld('Coût (€)', 'cost', v.cost, { hint: 'standard_price' })}
-              {fld('Prix de vente (€)', 'price', v.price, { hint: 'lst_price', ro: true })}
+              {fld('Prix de vente (€)', 'price', pubPrice(v), { hint: 'Public Pricelist HT', ro: true })}
               {fld('Poids (kg)', 'weight', v.weight, { hint: 'weight' })}
               {fld('Volume (m³)', 'volume', v.volume, { hint: 'volume' })}
               {fld('Dimensions (variante)', 'dimVariant', v.dimVariant, { full: true, hint: 'x_studio_dimensions_variant' })}
@@ -576,6 +583,22 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOp
               </tbody></table>
             <div className="cap" style={{ paddingTop: 12 }}>Marge brute = (public HT − coût de revient) / public HT. Prix public & USD = <code>product.pricelist.item</code> fixes ; wholesale hérite d'une règle globale −43%.</div>
           </>
+        ) : vtab === 'diffusion' ? (
+          <>
+            <div className="sectitle">Diffusion</div>
+            {tog('Disponible en B2B / wholesale', 'b2b', v.b2b)}
+            <div className="cap" style={{ paddingTop: 8 }}>Contrôle l'apparition de la variante dans le catalogue B2B. Écrit sur <code>x_studio_saleable_in_wholesale</code> (product.product).</div>
+          </>
+        ) : vtab === 'stock' ? (
+          <>
+            <div className="sectitle">Stock (product.product)</div>
+            <div className="grp2">
+              {fld('Qté disponible 2.0', 'availQty', v.availQty, { hint: 'x_available_qty', ro: true })}
+              {fld('Qté prochaine appro 2.0', 'nextSupplyQty', v.nextSupplyQty, { hint: 'x_next_supply_qty', ro: true })}
+              {fld('Prochaine appro 2.0', 'nextSupplyDate', v.nextSupplyDate, { hint: 'x_next_supply_date', ro: true })}
+            </div>
+            <div className="cap" style={{ paddingTop: 8 }}>Informations de l'onglet Stock d'Odoo (lecture seule).</div>
+          </>
         ) : (
           <ProductLabel product={product} variant={v} />
         )}
@@ -584,23 +607,84 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOp
   );
 };
 
-// Reconstruction de l'étiquette produit TIPTOE (logo, SKU, nom FR/EN, couleur, EAN, poids, dimensions colis).
+const labelNames = (product: Product, v: Variant) => {
+  const suffix = v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '';
+  return { fr: product.name + suffix, en: (product.nameEn || product.name) + suffix };
+};
+const hexToRgb = (hex: string): [number, number, number] => {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const svgToPng = (url: string, vbW: number, vbH: number, scale: number): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = vbW * scale; c.height = vbH * scale;
+      const ctx = c.getContext('2d');
+      if (!ctx) return reject(new Error('no ctx'));
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+
+// Génère l'étiquette 5×5 cm en PDF (vectoriel : texte + rect ; logo & code-barres en image).
+async function exportLabelPdf(product: Product, v: Variant) {
+  const doc = new jsPDF({ unit: 'mm', format: [50, 50] });
+  try {
+    const logo = await svgToPng(process.env.PUBLIC_URL + '/tiptoe-logo.svg', 904.14, 192.45, 4);
+    const lw = 34, lh = (lw * 192.45) / 904.14;
+    doc.addImage(logo, 'PNG', (50 - lw) / 2, 4.5, lw, lh);
+  } catch { /* logo indisponible */ }
+  doc.setFont('courier', 'bold'); doc.setFontSize(12);
+  doc.text(v.sku || '', 25, 15.5, { align: 'center' });
+  const { fr, en } = labelNames(product, v);
+  doc.setFont('courier', 'normal'); doc.setFontSize(6.6);
+  let y = 21;
+  const frLines = doc.splitTextToSize(fr, 30);
+  doc.text(frLines, 3, y); y += frLines.length * 2.7 + 1.5;
+  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(3, y, 26, y); y += 3;
+  doc.text(doc.splitTextToSize(en, 30), 3, y);
+  const [r, g, b] = hexToRgb(colorFor(v.attr) || v.color || '#e2e5e9');
+  doc.setFillColor(r, g, b); doc.rect(36.5, 20, 10.5, 10.5, 'F');
+  if (v.barcode) {
+    try {
+      const cv = document.createElement('canvas');
+      JsBarcode(cv, v.barcode, { format: /^\d{13}$/.test(v.barcode) ? 'EAN13' : 'CODE128', width: 2, height: 40, fontSize: 16, margin: 0 });
+      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 39, 27, 9);
+    } catch { /* EAN invalide */ }
+  }
+  const dims = v.dimPacked || v.dimVariant || product.dim || '';
+  doc.setFont('courier', 'bold'); doc.setFontSize(9);
+  if (v.weight) doc.text(`${v.weight} kg`, 47, 42.5, { align: 'right' });
+  doc.setFontSize(7);
+  if (dims) doc.text(dims, 47, 46.5, { align: 'right' });
+  doc.save(`${v.sku || 'etiquette'}.pdf`);
+}
+
+// Reconstruction de l'étiquette produit TIPTOE au format 5×5 cm.
 const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ product, variant: v }) => {
   const swatch = colorFor(v.attr) || v.color || '#e2e5e9';
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
-  const nameFr = product.name + (v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '');
-  const nameEn = (product.nameEn || product.name) + (v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '');
+  const { fr, en } = labelNames(product, v);
   return (
     <>
-      <div className="sectitle">Aperçu étiquette</div>
+      <div className="sectitle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>Étiquette · 5 × 5 cm</span>
+        <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => exportLabelPdf(product, v)}>⬇ Télécharger PDF</button>
+      </div>
       <div className="label-sheet">
-        <div className="label-logo">TIPTOE</div>
+        <img className="label-logo-img" src={process.env.PUBLIC_URL + '/tiptoe-logo.svg'} alt="TIPTOE" />
         <div className="label-sku">{v.sku}</div>
         <div className="label-mid">
           <div className="label-names">
-            <div className="label-fr">{nameFr}</div>
+            <div className="label-fr">{fr}</div>
             <div className="label-div"></div>
-            <div className="label-en">{nameEn}</div>
+            <div className="label-en">{en}</div>
           </div>
           <div className="label-swatch" style={{ background: swatch }}></div>
         </div>
@@ -612,7 +696,7 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
           </div>
         </div>
       </div>
-      <div className="cap" style={{ paddingTop: 10 }}>Reconstruction à partir des champs Odoo (nom, couleur, EAN, poids, dimensions emballé). Onglet indicatif.</div>
+      <div className="cap" style={{ paddingTop: 10 }}>Reconstruction à partir des champs Odoo. Le PDF est au format 5×5 cm.</div>
     </>
   );
 };

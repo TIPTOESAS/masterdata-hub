@@ -143,19 +143,19 @@ tr.bomfirst td{border-top:2px solid var(--line);}
 .bcbox{padding:8px 0;}
 .barcode{max-width:100%;height:auto;}
 
-/* étiquette produit (rendu fidèle à l'imprimé — toujours clair) */
-.label-sheet{background:#fff;color:#141414;border:1px solid #dcdfe3;border-radius:8px;padding:22px 24px 24px;max-width:560px;}
-.label-logo{font-weight:800;font-size:40px;line-height:.9;letter-spacing:-1.5px;font-family:var(--font);}
-.label-sku{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:1px;margin-top:6px;}
-.label-mid{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;margin-top:22px;}
-.label-names{flex:1;min-width:0;font-family:var(--mono);font-size:15px;line-height:1.35;}
-.label-div{border-top:1.5px solid #141414;margin:13px 0;max-width:66%;}
-.label-swatch{width:96px;height:96px;flex-shrink:0;border:1px solid rgba(0,0,0,.12);}
-.label-bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-top:26px;}
-.label-bc svg{max-width:240px;height:auto;}
+/* étiquette produit 5×5 cm (rendu fidèle à l'imprimé — toujours clair) */
+.label-sheet{background:#fff;color:#141414;border:1px solid #dcdfe3;border-radius:6px;width:360px;height:360px;padding:16px 18px;display:flex;flex-direction:column;box-sizing:border-box;}
+.label-logo-img{display:block;width:64%;height:auto;margin:6px auto 0;}
+.label-sku{text-align:center;font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:1px;margin-top:9px;}
+.label-mid{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:14px;flex:1;min-height:0;}
+.label-names{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;line-height:1.3;}
+.label-div{border-top:1.5px solid #141414;margin:9px 0;max-width:70%;}
+.label-swatch{width:64px;height:64px;flex-shrink:0;border:1px solid rgba(0,0,0,.12);}
+.label-bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:auto;}
+.label-bc svg{max-width:150px;height:auto;}
 .label-meta{text-align:right;font-family:var(--mono);white-space:nowrap;}
-.label-meta > div:first-child{font-size:22px;font-weight:700;}
-.label-dims{font-size:17px;font-weight:700;margin-top:2px;}
+.label-meta > div:first-child{font-size:16px;font-weight:700;}
+.label-dims{font-size:12px;font-weight:700;margin-top:2px;}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field.full{grid-column:1 / -1;}
 .field label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--faint);display:flex;align-items:center;gap:6px;}

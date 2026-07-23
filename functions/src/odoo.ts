@@ -50,7 +50,7 @@ const VAR_FIELDS = [
   'product_template_attribute_value_ids', 'x_studio_dimensions_variant', 'x_studio_hs_code_variant',
   'x_studio_country_of_origin_variant', 'x_studio_diameter', 'x_studio_dimensions_packed',
   'x_studio_flatpack', 'x_studio_gamme_famille_spidy', 'x_studio_product_state',
-  'x_studio_saleable_in_wholesale',
+  'x_studio_saleable_in_wholesale', 'x_available_qty', 'x_next_supply_qty', 'x_next_supply_date',
 ];
 
 // data: URL à partir d'un base64 Odoo (détection du format sur la signature).
@@ -126,6 +126,9 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       color: '',
       state: v.x_studio_product_state || '',
       b2b: !!v.x_studio_saleable_in_wholesale,
+      availQty: v.x_available_qty || 0,
+      nextSupplyQty: v.x_next_supply_qty || 0,
+      nextSupplyDate: v.x_next_supply_date || '',
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,
