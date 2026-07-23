@@ -684,7 +684,7 @@ const imgToPng = (url: string, size: number): Promise<string> =>
 function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, string>, product: Product, v: Variant) {
   if (logo) { const lw = 40, lh = (lw * 192.45) / 904.14; doc.addImage(logo, 'PNG', (60 - lw) / 2, 4.5, lw, lh); }
   doc.setFont('courier', 'bold'); doc.setFontSize(12);
-  doc.text(v.sku || '', 30, 15.8, { align: 'center' });
+  doc.text(v.sku || '', 30, 17, { align: 'center' });
   const { fr, en } = labelNames(product, v);
   doc.setFont('courier', 'normal'); doc.setFontSize(7);
   let y = 22.5;
