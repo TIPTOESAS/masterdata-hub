@@ -720,14 +720,14 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
     try {
       const cv = document.createElement('canvas');
       JsBarcode(cv, v.barcode, { format: /^\d{13}$/.test(v.barcode) ? 'EAN13' : 'CODE128', width: 4, height: 90, fontSize: 26, margin: 0 });
-      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 38, 33, 10);
+      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 38, 27, 10);
     } catch { /* EAN invalide */ }
   }
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
   doc.setFont('courier','bold'); doc.setFontSize(9);
-  if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
-  doc.setFontSize(7);
-  if (dims) doc.text(formatDims(dims), 57, 47, { align: 'right' });
+  if (v.weight) doc.text(`${v.weight} kg`, 57, 42.5, { align: 'right' });
+  doc.setFont('courier','normal'); doc.setFontSize(5.4);
+  if (dims) doc.text(formatDims(dims), 57, 46.5, { align: 'right' });
 }
 
 async function loadLogo(): Promise<string | null> {
