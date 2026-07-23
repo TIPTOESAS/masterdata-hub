@@ -116,6 +116,9 @@ tr.vrow td{padding-top:6px;padding-bottom:6px;border-top:1px dotted var(--line2)
 .dot.on{background:var(--write);}.dot.off{background:#cfd5dc;}.dot.sale{background:var(--accent);}.dot.buy{background:var(--warn);}
 .swatch{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-right:6px;border:1px solid rgba(0,0,0,.12);}
 .vopen{color:var(--accent);font-weight:700;}
+th.c,td.c{text-align:center;}
+.flag{font-weight:700;color:var(--faint);}
+.flag.on{color:var(--write);}
 .loading{padding:60px;text-align:center;color:var(--faint);font-size:13px;}
 .pcell{display:flex;align-items:center;gap:10px;}
 .thumb{width:32px;height:32px;border-radius:6px;object-fit:cover;border:1px solid var(--line);background:#fff;flex-shrink:0;}

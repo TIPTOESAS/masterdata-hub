@@ -1,6 +1,10 @@
 // Palette TIPTOE (source: tiptoe_couleurs_5.xlsx). Nom couleur (FR+EN normalises) -> HEX.
 // Genere automatiquement — sert a colorer les vignettes de variantes.
 export const COLOR_HEX: Record<string, string> = {
+  "ice cream beige": "#E8DDC6", "beige creme glacee": "#E8DDC6",
+  "chocolate brown": "#674D3F", "marron chocolat": "#674D3F",
+  "astral purple": "#665B7E", "violet astral": "#665B7E",
+  "magma orange": "#D87041", "orange magma": "#D87041",
   "ash pink": "#C69A87",
   "azure blue": "#5A76BE",
   "beige ivoire": "#DCD2BE",

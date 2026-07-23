@@ -31,6 +31,8 @@ const money = (v: number | null, cur = '€') =>
   v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
 // Prix de vente affiché = toujours le Public Pricelist HT (fallback list_price si absent).
 const pubPrice = (v: { pricePublic: number | null; price: number }) => (v.pricePublic != null ? v.pricePublic : v.price);
+// Indicateur booléen : coche verte si vrai, tiret grisé sinon.
+const flag = (b: boolean) => <span className={'flag' + (b ? ' on' : '')}>{b ? '✓' : '—'}</span>;
 // Style de vignette : texture matière si reconnue, sinon couleur de la palette.
 const swatchStyle = (attr: string, color?: string): React.CSSProperties => {
   const m = materialFor(attr);
@@ -292,7 +294,7 @@ const ProductsView: React.FC<{
           <table>
             <thead><tr>
               <th style={{ width: 30 }}></th><th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th><th>Hiérarchie</th>
-              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th>Dispo.</th>
+              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
             </tr></thead>
             <tbody>
               {list.map((p) => {
@@ -321,11 +323,9 @@ const ProductsView: React.FC<{
                       <td className="dim">{p.dim || '—'}</td>
                       <td className="r"><span className="vcount">{vsPairs.length}</span></td>
                       <td className="r price">{money(vsPairs.length ? pubPrice(vsPairs[0].v) : p.price)}</td>
-                      <td><span className="st">
-                        <span className={'dot ' + (p.active ? 'on' : 'off')} title={p.active ? 'Actif' : 'Archivé'}></span>
-                        <span className={'dot ' + (p.saleOk ? 'sale' : 'off')} title="Vendable"></span>
-                        <span className={'dot ' + (p.buyOk ? 'buy' : 'off')} title="Achetable"></span>
-                      </span></td>
+                      <td className="c">{flag(p.active)}</td>
+                      <td className="c">{flag(p.saleOk)}</td>
+                      <td className="c">{flag(p.buyOk)}</td>
                     </tr>
                     {open && vsPairs.map(({ v, i }) => (
                       <tr className="vrow" key={p.id + '-' + i} onClick={() => setSel(p)}>
@@ -340,13 +340,14 @@ const ProductsView: React.FC<{
                         <td className="dim">{v.dimVariant || '—'}</td>
                         <td></td>
                         <td className="r price">{money(pubPrice(v))}</td>
-                        <td><span className="vopen">détail ›</span></td>
+                        <td className="c"></td><td className="c"></td>
+                        <td className="r"><span className="vopen">détail ›</span></td>
                       </tr>
                     ))}
                   </React.Fragment>
                 );
               })}
-              {!list.length && <tr><td colSpan={11} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!list.length && <tr><td colSpan={13} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>
