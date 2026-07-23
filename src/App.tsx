@@ -23,7 +23,22 @@ const VAR_MAP: Record<string, string> = {
 };
 const NUMERIC = new Set(['price', 'cost', 'weight', 'volume', 'transport']);
 
+const STATES: [string, string][] = [['dev', 'Development'], ['soon', 'Upcoming'], ['prod', 'Active'], ['end_of_life', 'End of Life'], ['old', 'Old']];
+const stateLabel = (s: string) => STATES.find((x) => x[0] === s)?.[1] || s || '—';
+
 type Edits = Record<string, string | boolean>;
+
+// clé de facette -> propriété du produit
+type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState';
+const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean }[] = [
+  { key: 'superCat', label: 'Super-catégorie' },
+  { key: 'collection', label: 'Collection', scroll: true },
+  { key: 'cat', label: 'Catégorie', scroll: true },
+  { key: 'sub', label: 'Sous-catégorie', scroll: true },
+  { key: 'subcol', label: 'Sous-collection', scroll: true },
+  { key: 'supplier', label: 'Fournisseur par défaut', scroll: true },
+  { key: 'productState', label: 'État produit', state: true },
+];
 
 // ============================== App root ==============================
 const App: React.FC = () => {
@@ -60,52 +75,56 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
       </div>
       {view === 'products'
         ? <ProductsView products={products} setProducts={setProducts} q={q.toLowerCase()} />
-        : <BomView />}
+        : <BomView q={q.toLowerCase()} />}
     </div>
   );
 };
 
 // ============================== Products view ==============================
+const emptySets = (): Record<FKey, Set<string>> =>
+  ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), supplier: new Set(), productState: new Set() });
+
 const ProductsView: React.FC<{
   products: Product[] | null; setProducts: (p: Product[]) => void; q: string;
 }> = ({ products, setProducts, q }) => {
-  const [fSuper, setFSuper] = useState<Set<string>>(new Set());
-  const [fColl, setFColl] = useState<Set<string>>(new Set());
-  const [fSup, setFSup] = useState<Set<string>>(new Set());
+  const [sets, setSets] = useState<Record<FKey, Set<string>>>(emptySets());
   const [status, setStatus] = useState('active');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sel, setSel] = useState<Product | null>(null);
 
-  const toggle = (set: Set<string>, setter: (s: Set<string>) => void, v: string) => {
-    const n = new Set(set); n.has(v) ? n.delete(v) : n.add(v); setter(n);
+  const toggle = (key: FKey, v: string) => {
+    setSets((s) => { const n = { ...s, [key]: new Set(s[key]) }; n[key].has(v) ? n[key].delete(v) : n[key].add(v); return n; });
   };
+  const clear = (key: FKey) => setSets((s) => ({ ...s, [key]: new Set() }));
 
-  const list = useMemo(() => {
-    if (!products) return [];
-    return products.filter((p) => {
-      if (fSuper.size && !fSuper.has(p.superCat)) return false;
-      if (fColl.size && !fColl.has(p.collection)) return false;
-      if (fSup.size && !fSup.has(p.supplier)) return false;
-      if (status === 'active' && !p.active) return false;
-      if (status === 'archived' && p.active) return false;
-      if (status === 'sale' && !p.saleOk) return false;
-      if (status === 'purchase' && !p.buyOk) return false;
-      if (q) {
-        const h = (p.code + ' ' + p.name + ' ' + p.nameEn + ' ' + p.barcode + ' ' + p.tiptoeRef).toLowerCase();
-        if (!h.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [products, fSuper, fColl, fSup, status, q]);
+  // match applique tous les filtres, sauf éventuellement `except` (pour le comptage dynamique).
+  const match = useCallback((p: Product, except?: FKey) => {
+    for (const { key } of FACETS) {
+      if (key === except) continue;
+      if (sets[key].size && !sets[key].has(String(p[key] as any))) return false;
+    }
+    if (status === 'active' && !p.active) return false;
+    if (status === 'archived' && p.active) return false;
+    if (status === 'sale' && !p.saleOk) return false;
+    if (status === 'purchase' && !p.buyOk) return false;
+    if (q) {
+      const h = (p.code + ' ' + p.name + ' ' + p.nameEn + ' ' + p.barcode + ' ' + p.tiptoeRef).toLowerCase();
+      if (!h.includes(q)) return false;
+    }
+    return true;
+  }, [sets, status, q]);
 
-  const countBy = (field: keyof Product) => {
+  const list = useMemo(() => (products || []).filter((p) => match(p)), [products, match]);
+
+  // comptage dynamique : pour chaque facette, on compte sur les produits filtrés par TOUTES les autres.
+  const facetCounts = (key: FKey): Record<string, number> => {
     const m: Record<string, number> = {};
-    (products || []).forEach((p) => { const k = String(p[field]); if (k) m[k] = (m[k] || 0) + 1; });
+    (products || []).forEach((p) => { if (match(p, key)) { const k = String(p[key] as any); if (k) m[k] = (m[k] || 0) + 1; } });
     return m;
   };
-  const cSuper = countBy('superCat'), cColl = countBy('collection'), cSup = countBy('supplier');
+
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
-    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', barcode: p.barcode, price: p.price,
+    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
@@ -117,22 +136,28 @@ const ProductsView: React.FC<{
 
   if (!products) return <div className="loading">Chargement des produits depuis Odoo…</div>;
 
-  const fOpt = (group: Set<string>, setter: (s: Set<string>) => void, val: string, label: string, c: number) => (
-    <label className={'fopt' + (group.has(val) ? ' sel' : '')} key={val}>
-      <input type="checkbox" checked={group.has(val)} onChange={() => toggle(group, setter, val)} />
-      <span>{label}</span><span className="c">{c}</span>
-    </label>
-  );
+  const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean) => {
+    const counts = facetCounts(key);
+    let keys = Object.keys(counts);
+    keys = isState ? STATES.map((s) => s[0]).filter((k) => counts[k]) : keys.sort();
+    const opts = keys.map((k) => (
+      <label className={'fopt' + (sets[key].has(k) ? ' sel' : '')} key={k}>
+        <input type="checkbox" checked={sets[key].has(k)} onChange={() => toggle(key, k)} />
+        <span>{isState ? stateLabel(k) : (key === 'supplier' ? k : cap(k))}</span><span className="c">{counts[k]}</span>
+      </label>
+    ));
+    return (
+      <React.Fragment key={key}>
+        <div className="rh">{label} {sets[key].size > 0 && <span className="clr" onClick={() => clear(key)}>effacer</span>}</div>
+        {scroll ? <div className="scrollbox">{opts}</div> : opts}
+      </React.Fragment>
+    );
+  };
 
   return (
     <div className="layout">
       <aside className="rail">
-        <div className="rh">Super-catégorie {fSuper.size > 0 && <span className="clr" onClick={() => setFSuper(new Set())}>effacer</span>}</div>
-        {Object.keys(cSuper).sort().map((k) => fOpt(fSuper, setFSuper, k, cap(k), cSuper[k]))}
-        <div className="rh">Collection {fColl.size > 0 && <span className="clr" onClick={() => setFColl(new Set())}>effacer</span>}</div>
-        <div className="scrollbox">{Object.keys(cColl).sort().map((k) => fOpt(fColl, setFColl, k, cap(k), cColl[k]))}</div>
-        <div className="rh">Fournisseur par défaut {fSup.size > 0 && <span className="clr" onClick={() => setFSup(new Set())}>effacer</span>}</div>
-        <div className="scrollbox">{Object.keys(cSup).sort().map((k) => fOpt(fSup, setFSup, k, k, cSup[k]))}</div>
+        {FACETS.map((f) => renderFacet(f.key, f.label, f.scroll, f.state))}
         <div className="rh">Statut</div>
         <div className="seg">
           {[['active', 'Actifs'], ['archived', 'Archivés'], ['sale', 'Vendables'], ['purchase', 'Achetables']].map(([k, l]) => (
@@ -154,7 +179,7 @@ const ProductsView: React.FC<{
           <table>
             <thead><tr>
               <th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th><th>Hiérarchie</th>
-              <th>TipToe type</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th>Statut</th>
+              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th>Dispo.</th>
             </tr></thead>
             <tbody>
               {list.map((p) => {
@@ -169,9 +194,13 @@ const ProductsView: React.FC<{
                       }}>
                       <td className="exp"><span className={'caret' + (open ? ' open' : '')}>▶</span></td>
                       <td className="code">{p.code || '—'}</td>
-                      <td><div className="pname">{p.name}</div>{p.nameEn !== p.name && <div className="psub">{p.nameEn}</div>}</td>
+                      <td><div className="pcell">
+                        {p.image ? <img className="thumb" src={p.image} alt="" /> : <span className="thumb ph">◆</span>}
+                        <div><div className="pname">{p.name}</div>{p.nameEn !== p.name && <div className="psub">{p.nameEn}</div>}</div>
+                      </div></td>
                       <td><span className="hchip col">{p.collection || '—'}</span> {p.cat && <span className="hchip">{p.cat}</span>}</td>
                       <td>{p.tiptoeType ? <span className="tt">{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
+                      <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
                       <td className="dim">{p.dim || '—'}</td>
                       <td className="r"><span className="vcount">{vs.length}</span></td>
                       <td className="r price">{money(p.price)}</td>
@@ -188,6 +217,7 @@ const ProductsView: React.FC<{
                         <td><span className="swatch" style={{ background: v.color || '#ccd1d8' }}></span>{v.attr}</td>
                         <td>{v.barcode ? <span className="ean">EAN {v.barcode}</span> : <span className="ean" style={{ color: 'var(--faint)' }}>—</span>}</td>
                         <td></td>
+                        <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
                         <td className="dim">{v.dimVariant || '—'}</td>
                         <td></td>
                         <td className="r price">{money(v.price)}</td>
@@ -197,7 +227,7 @@ const ProductsView: React.FC<{
                   </React.Fragment>
                 );
               })}
-              {!list.length && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!list.length && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -299,10 +329,12 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
             <div className="dcode">{variant.sku} · product.product · variante de « {product.name} »</div>
           </div><button className="x" onClick={onClose}>✕</button></div>
         ) : (
-          <div className="dh"><div>
-            <div className="dt">{product.name}</div>
-            <div className="dcode">{product.code || '—'} · product.template #{product.id}</div>
-          </div><button className="x" onClick={onClose}>✕</button></div>
+          <div className="dh">
+            {product.image ? <img className="thumb lg" src={product.image} alt="" /> : <span className="thumb lg ph">◆</span>}
+            <div>
+              <div className="dt">{product.name}</div>
+              <div className="dcode">{product.code || '—'} · product.template #{product.id}</div>
+            </div><button className="x" onClick={onClose}>✕</button></div>
         )}
 
         {variant
@@ -413,6 +445,9 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
 // ---- variant body: fields + pricing ----
 const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld }) => {
   const [vtab, setVtab] = useState<'fields' | 'pricing'>('fields');
+  const base = v.pricePublic;                                  // marge calculée sur le public HT
+  const marginAbs = base != null ? base - v.cost : null;
+  const marginPct = base ? Math.round((marginAbs! / base) * 1000) / 10 : null;
   return (
     <>
       <div className="dtabs">
@@ -448,8 +483,12 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
                 <tr><td>Public Pricelist HT</td><td>EUR</td><td className="r price">{money(v.pricePublic)}</td><td><span className="rbadge fix">item fixe</span></td></tr>
                 <tr><td>Wholesale</td><td>EUR</td><td className="r price">{money(v.priceWholesale)}</td><td><span className="rbadge inh">−43% (global)</span></td></tr>
                 <tr><td>USD</td><td>$ USD</td><td className="r price">{money(v.priceUsd, '$')}</td><td><span className="rbadge fix">item fixe</span></td></tr>
+                <tr style={{ borderTop: '2px solid var(--line)' }}><td>Coût de revient <span className="fhint">standard_price</span></td><td>EUR</td><td className="r price">{money(v.cost)}</td><td><span className="rbadge tmpl">variante</span></td></tr>
+                <tr><td><b>Marge brute</b> <span className="cap">/ public HT</span></td><td>EUR</td>
+                  <td className="r price" style={{ color: marginAbs != null && marginAbs < 0 ? 'var(--red)' : 'var(--write)' }}>{money(marginAbs)}</td>
+                  <td>{marginPct != null ? <span className={'rbadge ' + (marginPct >= 0 ? 'fix' : 'inh')}>{marginPct}%</span> : '—'}</td></tr>
               </tbody></table>
-            <div className="cap" style={{ paddingTop: 12 }}>Prix public & USD = <code>product.pricelist.item</code> fixes par variante. Wholesale hérite d'une règle globale −43% sur le public (édition pricing à venir).</div>
+            <div className="cap" style={{ paddingTop: 12 }}>Marge brute = (public HT − coût de revient) / public HT. Prix public & USD = <code>product.pricelist.item</code> fixes ; wholesale hérite d'une règle globale −43%.</div>
           </>
         )}
       </div>
@@ -488,21 +527,75 @@ const BomTab: React.FC<{ tmplId: number }> = ({ tmplId }) => {
   return <>{boms.map((b) => <BomCard key={b.id} bom={b} defaultOpen />)}</>;
 };
 
-// ============================== BOM view (dédiée) ==============================
-const BomView: React.FC = () => {
+// ============================== BOM view (dédiée) : tableau plat + filtres ==============================
+type BKey = 'superCat' | 'collection' | 'cat';
+const BFACETS: { key: BKey; label: string; scroll?: boolean }[] = [
+  { key: 'superCat', label: 'Super-catégorie' },
+  { key: 'collection', label: 'Collection', scroll: true },
+  { key: 'cat', label: 'Catégorie', scroll: true },
+];
+const emptyBSets = (): Record<BKey, Set<string>> => ({ superCat: new Set(), collection: new Set(), cat: new Set() });
+
+const BomView: React.FC<{ q: string }> = ({ q }) => {
   const [boms, setBoms] = useState<Bom[] | null>(null);
-  const [q, setQ] = useState('');
+  const [sets, setSets] = useState<Record<BKey, Set<string>>>(emptyBSets());
   useEffect(() => { fetchBoms().then(setBoms); }, []);
+
+  const toggle = (key: BKey, v: string) => setSets((s) => { const n = { ...s, [key]: new Set(s[key]) }; n[key].has(v) ? n[key].delete(v) : n[key].add(v); return n; });
+  const match = useCallback((b: Bom, except?: BKey) => {
+    for (const { key } of BFACETS) { if (key === except) continue; if (sets[key].size && !sets[key].has(String(b[key]))) return false; }
+    if (q) { const h = (b.parentCode + ' ' + b.productName + ' ' + b.code).toLowerCase(); if (!h.includes(q)) return false; }
+    return true;
+  }, [sets, q]);
+
   if (!boms) return <div className="loading">Chargement des nomenclatures depuis Odoo…</div>;
-  const list = boms.filter((b) => !q || (b.productName + ' ' + b.code).toLowerCase().includes(q.toLowerCase()));
+  const list = boms.filter((b) => match(b));
+  const facetCounts = (key: BKey) => { const m: Record<string, number> = {}; boms.forEach((b) => { if (match(b, key)) { const k = String(b[key]); if (k) m[k] = (m[k] || 0) + 1; } }); return m; };
+  const totalLines = list.reduce((n, b) => n + Math.max(b.lines.length, 1), 0);
+
   return (
-    <main className="main">
-      <div className="mhead"><h1>Nomenclatures</h1><span className="count">{list.length} BOM</span>
-        <div className="actions"><div className="gsearch" style={{ maxWidth: 260 }}><span className="mag">🔍</span>
-          <input placeholder="Filtrer…" value={q} onChange={(e) => setQ(e.target.value)} /></div></div></div>
-      {list.map((b) => <BomCard key={b.id} bom={b} />)}
-      {!list.length && <div className="cap">Aucune nomenclature.</div>}
-    </main>
+    <div className="layout">
+      <aside className="rail">
+        {BFACETS.map(({ key, label, scroll }) => {
+          const counts = facetCounts(key); const keys = Object.keys(counts).sort();
+          const opts = keys.map((k) => (
+            <label className={'fopt' + (sets[key].has(k) ? ' sel' : '')} key={k}>
+              <input type="checkbox" checked={sets[key].has(k)} onChange={() => toggle(key, k)} />
+              <span>{cap(k)}</span><span className="c">{counts[k]}</span></label>
+          ));
+          return (<React.Fragment key={key}>
+            <div className="rh">{label} {sets[key].size > 0 && <span className="clr" onClick={() => setSets((s) => ({ ...s, [key]: new Set() }))}>effacer</span>}</div>
+            {scroll ? <div className="scrollbox">{opts}</div> : opts}
+          </React.Fragment>);
+        })}
+      </aside>
+
+      <main className="main">
+        <div className="mhead"><h1>Nomenclatures</h1><span className="count">{list.length} BOM · {totalLines} lignes</span></div>
+        <div className="tablewrap">
+          <table>
+            <thead><tr>
+              <th>SKU parent</th><th>Description parent</th><th>Composant</th><th>Description composant</th><th className="r">Quantité</th>
+            </tr></thead>
+            <tbody>
+              {list.flatMap((b) => {
+                const rows = b.lines.length ? b.lines : [null];
+                return rows.map((l, i) => (
+                  <tr key={b.id + '-' + i} style={{ cursor: 'default' }} className={i === 0 ? 'bomfirst' : ''}>
+                    <td className="code">{i === 0 ? (b.parentCode || '—') : ''}</td>
+                    <td>{i === 0 ? <><span className="pname" style={{ fontSize: 12.5 }}>{b.productName}</span>{b.type === 'phantom' && <span className="kit" style={{ marginLeft: 6 }}>Kit</span>}</> : ''}</td>
+                    <td className="code">{l ? (l.code || '—') : <span className="cap">(vide)</span>}</td>
+                    <td>{l ? l.name : ''}</td>
+                    <td className="r">{l ? l.qty + (l.uom ? ' ' + l.uom : '') : ''}</td>
+                  </tr>
+                ));
+              })}
+              {!list.length && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucune nomenclature.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
   );
 };
 

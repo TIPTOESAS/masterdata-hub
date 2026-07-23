@@ -6,6 +6,7 @@ export interface Variant {
   attr: string;             // libellé des valeurs d'attributs
   color?: string;           // couleur d'affichage (swatch)
   barcode: string;
+  state: string;            // x_studio_product_state (dev/soon/prod/end_of_life/old)
   price: number;            // lst_price
   cost: number;             // standard_price
   weight: number;
@@ -25,6 +26,8 @@ export interface Variant {
 export interface Product {
   id: number;               // product.template id
   code: string;             // default_code
+  image: string;            // image_128 en data:URL ('' si aucune)
+  productState: string;     // x_studio_product_state représentatif (1re variante)
   name: string;             // nom (fr)
   nameEn: string;
   nameDe: string;
@@ -69,6 +72,11 @@ export interface Bom {
   id: number;               // mrp.bom id
   productTmplId: number;
   productName: string;
+  parentCode: string;       // default_code du produit parent (SKU parent)
+  superCat: string;
+  collection: string;
+  cat: string;
+  sub: string;
   code: string;             // référence BOM
   type: string;             // normal / phantom (kit)
   qty: number;              // quantité produite

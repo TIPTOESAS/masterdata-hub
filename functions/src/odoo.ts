@@ -43,14 +43,24 @@ const TMPL_FIELDS = [
   'x_sub_collection', 'categ_id', 'x_studio_dimensions', 'weight', 'volume', 'barcode', 'hs_code',
   'country_of_origin', 'uom_name', 'list_price', 'standard_price', 'sale_ok', 'purchase_ok', 'active',
   'x_studio_tiptoe_ref', 'x_studio_tiptoe_type', 'x_studio_tiptoe_type_detail', 'x_studio_launch_date',
-  'x_studio_woo_tmpl_id', 'x_studio_transport_cost',
+  'x_studio_woo_tmpl_id', 'x_studio_transport_cost', 'image_128',
 ];
 const VAR_FIELDS = [
   'default_code', 'barcode', 'lst_price', 'standard_price', 'weight', 'volume', 'product_tmpl_id',
   'product_template_attribute_value_ids', 'x_studio_dimensions_variant', 'x_studio_hs_code_variant',
   'x_studio_country_of_origin_variant', 'x_studio_diameter', 'x_studio_dimensions_packed',
-  'x_studio_flatpack', 'x_studio_gamme_famille_spidy',
+  'x_studio_flatpack', 'x_studio_gamme_famille_spidy', 'x_studio_product_state',
 ];
+
+// data: URL à partir d'un base64 Odoo (détection du format sur la signature).
+function imgDataUrl(b64: string | false): string {
+  if (!b64) return '';
+  let mime = 'image/png';
+  if (b64.startsWith('/9j/')) mime = 'image/jpeg';
+  else if (b64.startsWith('R0lGOD')) mime = 'image/gif';
+  else if (b64.startsWith('UklGR')) mime = 'image/webp';
+  return `data:${mime};base64,${b64}`;
+}
 
 // Liste des templates + variantes + pricing + fournisseur par défaut.
 export async function listProducts(cfg: OdooConfig, opts: { limit?: number; domain?: any[] } = {}): Promise<any[]> {
@@ -113,6 +123,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       sku: v.default_code || '',
       attr: (v.product_template_attribute_value_ids || []).map((id: number) => avNames[id]).filter(Boolean).join(' / ') || 'variante unique',
       color: '',
+      state: v.x_studio_product_state || '',
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,
@@ -131,9 +142,14 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
     });
   });
 
-  return tmpls.map((t) => ({
+  return tmpls.map((t) => {
+    const tvars = varsByTmpl[t.id] || [];
+    const states = Array.from(new Set(tvars.map((v: any) => v.state).filter(Boolean)));
+    return {
     id: t.id,
     code: t.default_code || '',
+    image: imgDataUrl(t.image_128),
+    productState: states[0] || '',
     name: t.name || '',
     nameEn: t.name || '',
     nameDe: t.name || '',
@@ -164,7 +180,8 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
     launch: t.x_studio_launch_date || '',
     woo: t.x_studio_woo_tmpl_id || '',
     variants: varsByTmpl[t.id] || [],
-  }));
+    };
+  });
 }
 
 // Traductions d'un template (nom par langue).
@@ -203,15 +220,30 @@ export async function listBoms(cfg: OdooConfig, opts: { productTmplId?: number |
       uom: m2oName(l.product_uom_id),
     });
   });
-  return boms.map((b) => ({
-    id: b.id,
-    productTmplId: Array.isArray(b.product_tmpl_id) ? b.product_tmpl_id[0] : b.product_tmpl_id,
-    productName: m2oName(b.product_tmpl_id),
-    code: b.code || '',
-    type: b.type || 'normal',
-    qty: b.product_qty || 1,
-    lines: linesByBom[b.id] || [],
-  }));
+  // hiérarchie + code SKU du produit parent (pour le panel de filtres BOM)
+  const tids = Array.from(new Set(boms.map((b) => (Array.isArray(b.product_tmpl_id) ? b.product_tmpl_id[0] : b.product_tmpl_id))));
+  const parents: any[] = tids.length ? await execute(cfg, 'product.template', 'read', [tids],
+    { fields: ['default_code', 'x_super_category', 'x_collection', 'x_category', 'x_sub_category'] }) : [];
+  const parentById: Record<number, any> = {};
+  parents.forEach((p) => (parentById[p.id] = p));
+  return boms.map((b) => {
+    const tid = Array.isArray(b.product_tmpl_id) ? b.product_tmpl_id[0] : b.product_tmpl_id;
+    const par = parentById[tid] || {};
+    return {
+      id: b.id,
+      productTmplId: tid,
+      productName: m2oName(b.product_tmpl_id),
+      parentCode: par.default_code || '',
+      superCat: par.x_super_category || '',
+      collection: par.x_collection || '',
+      cat: par.x_category || '',
+      sub: par.x_sub_category || '',
+      code: b.code || '',
+      type: b.type || 'normal',
+      qty: b.product_qty || 1,
+      lines: linesByBom[b.id] || [],
+    };
+  });
 }
 
 // Écriture générique (write) sur un enregistrement.
