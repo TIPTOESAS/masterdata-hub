@@ -683,10 +683,10 @@ const imgToPng = (url: string, size: number): Promise<string> =>
 // Dessine une étiquette 6×5 cm sur la page courante (vectoriel : texte + rect ; logo, EAN & matière en image).
 function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, string>, product: Product, v: Variant) {
   if (logo) { const lw = 40, lh = (lw * 192.45) / 904.14; doc.addImage(logo, 'PNG', (60 - lw) / 2, 4.5, lw, lh); }
-  doc.setFont('courier', 'bold'); doc.setFontSize(12);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12);
   doc.text(v.sku || '', 30, 17, { align: 'center' });
   const { fr, en } = labelNames(product, v);
-  doc.setFont('courier', 'normal'); doc.setFontSize(7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
   let y = 22.5;
   const frLines = doc.splitTextToSize(fr, 40);
   doc.text(frLines, 3, y); y += frLines.length * 2.9 + 1.7;
@@ -707,7 +707,7 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
     } catch { /* EAN invalide */ }
   }
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
-  doc.setFont('courier', 'bold'); doc.setFontSize(9);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
   if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
   doc.setFontSize(7);
   if (dims) doc.text(withMm(dims), 57, 47, { align: 'right' });
