@@ -384,12 +384,18 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
       <div className="scrim show" onClick={onClose}></div>
       <aside className="drawer show">
         {variant ? (
-          <div className="dh"><div style={{ flex: 1, minWidth: 0 }}>
-            <button className="back" onClick={backToTemplate}>‹ Retour au template</button>
-            <div className="dt" style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="swatch" style={{ background: colorFor(variant.attr) || variant.color || '#ccd1d8', width: 16, height: 16 }}></span>{variant.attr}</div>
-            <div className="dcode">{variant.sku} · product.product · variante de « {product.name} »</div>
-          </div><button className="x" onClick={onClose}>✕</button></div>
+          <div className="dh">
+            {product.image ? <img className="thumb lg" src={product.image} alt="" /> : <span className="thumb lg ph">◆</span>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <button className="back" onClick={backToTemplate}>‹ Retour au template</button>
+              <div className="dt" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{product.name}</span>
+                <span style={{ color: 'var(--faint)', fontWeight: 400 }}>›</span>
+                <span className="swatch" style={{ background: colorFor(variant.attr) || variant.color || '#ccd1d8', width: 16, height: 16 }}></span>
+                <span style={{ color: 'var(--muted)', fontWeight: 500 }}>{variant.attr}</span>
+              </div>
+              <div className="dcode">{variant.sku} · product.product</div>
+            </div><button className="x" onClick={onClose}>✕</button></div>
         ) : (
           <div className="dh">
             {product.image ? <img className="thumb lg" src={product.image} alt="" /> : <span className="thumb lg ph">◆</span>}
