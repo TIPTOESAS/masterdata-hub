@@ -29,16 +29,41 @@ const stateLabel = (s: string) => STATES.find((x) => x[0] === s)?.[1] || s || '�
 type Edits = Record<string, string | boolean>;
 
 // clé de facette -> propriété du produit
-type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState';
+type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState' | 'tiptoeType';
 const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean }[] = [
   { key: 'superCat', label: 'Super-catégorie' },
   { key: 'collection', label: 'Collection', scroll: true },
   { key: 'cat', label: 'Catégorie', scroll: true },
   { key: 'sub', label: 'Sous-catégorie', scroll: true },
   { key: 'subcol', label: 'Sous-collection', scroll: true },
+  { key: 'tiptoeType', label: 'TipToe type', scroll: true },
   { key: 'supplier', label: 'Fournisseur par défaut', scroll: true },
   { key: 'productState', label: 'État produit', state: true },
 ];
+
+// Panneau de filtres rétractable / élargissable (blocs côte à côte en mode large).
+const FilterRail: React.FC<{ activeCount: number; children: React.ReactNode }> = ({ activeCount, children }) => {
+  const [collapsed, setCollapsed] = useState(false);
+  const [wide, setWide] = useState(false);
+  if (collapsed) return (
+    <aside className="rail collapsed">
+      <button className="railtoggle" title="Afficher les filtres" onClick={() => setCollapsed(false)}>⟩</button>
+      <div className="railvlabel">Filtres{activeCount ? ` · ${activeCount}` : ''}</div>
+    </aside>
+  );
+  return (
+    <aside className={'rail' + (wide ? ' wide' : '')}>
+      <div className="railhead">
+        <span className="railtitle">Filtres {activeCount > 0 && <span className="railn">{activeCount}</span>}</span>
+        <span className="railbtns">
+          <button className={'railbtn' + (wide ? ' on' : '')} title={wide ? 'Une colonne' : 'Élargir (colonnes côte à côte)'} onClick={() => setWide(!wide)}>⊞</button>
+          <button className="railbtn" title="Réduire" onClick={() => setCollapsed(true)}>⟨</button>
+        </span>
+      </div>
+      <div className={'facets' + (wide ? ' wide' : '')}>{children}</div>
+    </aside>
+  );
+};
 
 // ============================== App root ==============================
 const App: React.FC = () => {
@@ -82,7 +107,7 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
 
 // ============================== Products view ==============================
 const emptySets = (): Record<FKey, Set<string>> =>
-  ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), supplier: new Set(), productState: new Set() });
+  ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), tiptoeType: new Set(), supplier: new Set(), productState: new Set() });
 
 const ProductsView: React.FC<{
   products: Product[] | null; setProducts: (p: Product[]) => void; q: string;
@@ -147,24 +172,28 @@ const ProductsView: React.FC<{
       </label>
     ));
     return (
-      <React.Fragment key={key}>
+      <div className="fblock" key={key}>
         <div className="rh">{label} {sets[key].size > 0 && <span className="clr" onClick={() => clear(key)}>effacer</span>}</div>
         {scroll ? <div className="scrollbox">{opts}</div> : opts}
-      </React.Fragment>
+      </div>
     );
   };
 
+  const activeCount = FACETS.reduce((n, f) => n + sets[f.key].size, 0);
+
   return (
     <div className="layout">
-      <aside className="rail">
+      <FilterRail activeCount={activeCount}>
         {FACETS.map((f) => renderFacet(f.key, f.label, f.scroll, f.state))}
-        <div className="rh">Statut</div>
-        <div className="seg">
-          {[['active', 'Actifs'], ['archived', 'Archivés'], ['sale', 'Vendables'], ['purchase', 'Achetables']].map(([k, l]) => (
-            <span key={k} className={'segb' + (status === k ? ' on' : '')} onClick={() => setStatus(k)}>{l}</span>
-          ))}
+        <div className="fblock">
+          <div className="rh">Statut</div>
+          <div className="seg">
+            {[['active', 'Actifs'], ['archived', 'Archivés'], ['sale', 'Vendables'], ['purchase', 'Achetables']].map(([k, l]) => (
+              <span key={k} className={'segb' + (status === k ? ' on' : '')} onClick={() => setStatus(k)}>{l}</span>
+            ))}
+          </div>
         </div>
-      </aside>
+      </FilterRail>
 
       <main className="main">
         <div className="mhead">
@@ -553,9 +582,11 @@ const BomView: React.FC<{ q: string }> = ({ q }) => {
   const facetCounts = (key: BKey) => { const m: Record<string, number> = {}; boms.forEach((b) => { if (match(b, key)) { const k = String(b[key]); if (k) m[k] = (m[k] || 0) + 1; } }); return m; };
   const totalLines = list.reduce((n, b) => n + Math.max(b.lines.length, 1), 0);
 
+  const activeCount = BFACETS.reduce((n, f) => n + sets[f.key].size, 0);
+
   return (
     <div className="layout">
-      <aside className="rail">
+      <FilterRail activeCount={activeCount}>
         {BFACETS.map(({ key, label, scroll }) => {
           const counts = facetCounts(key); const keys = Object.keys(counts).sort();
           const opts = keys.map((k) => (
@@ -563,12 +594,12 @@ const BomView: React.FC<{ q: string }> = ({ q }) => {
               <input type="checkbox" checked={sets[key].has(k)} onChange={() => toggle(key, k)} />
               <span>{cap(k)}</span><span className="c">{counts[k]}</span></label>
           ));
-          return (<React.Fragment key={key}>
+          return (<div className="fblock" key={key}>
             <div className="rh">{label} {sets[key].size > 0 && <span className="clr" onClick={() => setSets((s) => ({ ...s, [key]: new Set() }))}>effacer</span>}</div>
             {scroll ? <div className="scrollbox">{opts}</div> : opts}
-          </React.Fragment>);
+          </div>);
         })}
-      </aside>
+      </FilterRail>
 
       <main className="main">
         <div className="mhead"><h1>Nomenclatures</h1><span className="count">{list.length} BOM · {totalLines} lignes</span></div>
