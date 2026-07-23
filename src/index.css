@@ -27,7 +27,7 @@ code{font-family:var(--mono);}
 .login-note{color:var(--faint);font-size:12px;margin-top:22px;}
 
 /* ---------- shell ---------- */
-.app{max-width:1280px;margin:0 auto;}
+.app{width:100%;}
 .topbar{display:flex;align-items:center;gap:12px;padding:11px 18px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30;}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px;}
 .logo .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#18202b,#3a4757);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;}
