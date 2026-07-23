@@ -49,7 +49,7 @@ const VAR_MAP: Record<string, string> = {
   sku: 'default_code', barcode: 'barcode', cost: 'standard_price', weight: 'weight', volume: 'volume',
   dimVariant: 'x_studio_dimensions_variant', hsVariant: 'x_studio_hs_code_variant', diameter: 'x_studio_diameter',
   dimPacked: 'x_studio_dimensions_packed', flatpack: 'x_studio_flatpack', spidy: 'x_studio_gamme_famille_spidy',
-  b2b: 'x_studio_saleable_in_wholesale',
+  b2b: 'x_studio_saleable_in_wholesale', supplier: 'x_studio_char_field_6T0cm',
 };
 const NUMERIC = new Set(['price', 'cost', 'weight', 'volume', 'transport']);
 // Admins autorisés à écrire dans Odoo. Les autres @tiptoe.fr sont en lecture seule.
@@ -200,7 +200,7 @@ const ProductsView: React.FC<{
 
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
     id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui',
-    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', barcode: p.barcode, price: p.price,
+    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: p.supplier, barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
@@ -608,6 +608,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; tog: any; product: Pro
               {fld('Origine (variante)', 'origin', v.origin, { ro: true, hint: 'x_studio_country_of_origin_variant' })}
               {fld('Flatpack', 'flatpack', v.flatpack, { select: ['', 'yes', 'no'], hint: 'x_studio_flatpack' })}
               {fld('Gamme / Famille Spidy', 'spidy', v.spidy, { hint: 'x_studio_gamme_famille_spidy' })}
+              {fld('Fournisseur par défaut', 'supplier', v.supplier, { hint: 'x_studio_char_field_6T0cm' })}
             </div>
             <div className="sectitle" style={{ marginTop: 18 }}>Code-barres</div>
             <div className="bcbox"><Barcode value={v.barcode} /></div>

@@ -51,6 +51,7 @@ const VAR_FIELDS = [
   'x_studio_country_of_origin_variant', 'x_studio_diameter', 'x_studio_dimensions_packed',
   'x_studio_flatpack', 'x_studio_gamme_famille_spidy', 'x_studio_product_state',
   'x_studio_saleable_in_wholesale', 'x_available_qty', 'x_next_supply_qty', 'x_next_supply_date',
+  'x_studio_char_field_6T0cm',
 ];
 
 // data: URL à partir d'un base64 Odoo (détection du format sur la signature).
@@ -129,6 +130,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       availQty: v.x_available_qty || 0,
       nextSupplyQty: v.x_next_supply_qty || 0,
       nextSupplyDate: v.x_next_supply_date || '',
+      supplier: v.x_studio_char_field_6T0cm || '',
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,
@@ -179,7 +181,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
     saleOk: !!t.sale_ok,
     buyOk: !!t.purchase_ok,
     active: !!t.active,
-    supplier: supByTmpl[t.id] || '',
+    supplier: tvars.map((v: any) => v.supplier).find(Boolean) || supByTmpl[t.id] || '',
     tiptoeRef: t.x_studio_tiptoe_ref || '',
     tiptoeType: t.x_studio_tiptoe_type || '',
     tiptoeTypeDetail: m2oName(t.x_studio_tiptoe_type_detail),
