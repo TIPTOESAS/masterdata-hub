@@ -1,10 +1,28 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import JsBarcode from 'jsbarcode';
 import { onAuthChange, signOutUser } from './services/auth';
 import { fetchProducts, fetchBoms, writeOdoo } from './services/odoo';
 import { Product, Variant, Bom } from './types';
+import { colorFor } from './colors';
 import Login from './components/Login';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+
+// Rend un EAN-13 (ou CODE128) en code-barres SVG.
+const Barcode: React.FC<{ value: string }> = ({ value }) => {
+  const ref = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    if (!ref.current || !value) return;
+    try {
+      JsBarcode(ref.current, value, {
+        format: /^\d{13}$/.test(value) ? 'EAN13' : 'CODE128',
+        width: 1.7, height: 46, fontSize: 13, margin: 6, background: 'transparent',
+      });
+    } catch { /* code invalide : on n'affiche rien */ }
+  }, [value]);
+  if (!value) return <span className="cap">pas de code-barres</span>;
+  return <svg ref={ref} className="barcode" />;
+};
 
 const money = (v: number | null, cur = '€') =>
   v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
@@ -26,19 +44,32 @@ const NUMERIC = new Set(['price', 'cost', 'weight', 'volume', 'transport']);
 const STATES: [string, string][] = [['dev', 'Development'], ['soon', 'Upcoming'], ['prod', 'Active'], ['end_of_life', 'End of Life'], ['old', 'Old']];
 const stateLabel = (s: string) => STATES.find((x) => x[0] === s)?.[1] || s || '—';
 
+// Couleur déterministe par TipToe type (hash -> palette) pour distinguer les badges d'un coup d'œil.
+const TT_PALETTE: [string, string][] = [
+  ['#e6effc', '#2760a0'], ['#e2f3e9', '#1f7a44'], ['#fbeecd', '#8a6510'], ['#efeaf6', '#6a4a86'],
+  ['#fce4e4', '#b02a2a'], ['#cdeae4', '#0a7c66'], ['#f5e6cd', '#8a5a1a'], ['#e0e7ef', '#3a4757'],
+];
+const ttStyle = (t: string): React.CSSProperties => {
+  if (!t) return {};
+  let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  const [bg, fg] = TT_PALETTE[h % TT_PALETTE.length];
+  return { background: bg, color: fg };
+};
+
 type Edits = Record<string, string | boolean>;
 
 // clé de facette -> propriété du produit
-type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState' | 'tiptoeType';
-const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean }[] = [
+type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState' | 'tiptoeType' | 'b2b';
+const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean; order?: string[] }[] = [
+  { key: 'tiptoeType', label: 'TipToe type', scroll: true },
+  { key: 'productState', label: 'Statut', state: true },
+  { key: 'b2b', label: 'Catalogue B2B', order: ['Oui', 'Non'] },
   { key: 'superCat', label: 'Super-catégorie' },
   { key: 'collection', label: 'Collection', scroll: true },
   { key: 'cat', label: 'Catégorie', scroll: true },
   { key: 'sub', label: 'Sous-catégorie', scroll: true },
   { key: 'subcol', label: 'Sous-collection', scroll: true },
-  { key: 'tiptoeType', label: 'TipToe type', scroll: true },
   { key: 'supplier', label: 'Fournisseur par défaut', scroll: true },
-  { key: 'productState', label: 'État produit', state: true },
 ];
 
 // Panneau de filtres rétractable / élargissable (blocs côte à côte en mode large).
@@ -107,7 +138,7 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
 
 // ============================== Products view ==============================
 const emptySets = (): Record<FKey, Set<string>> =>
-  ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), tiptoeType: new Set(), supplier: new Set(), productState: new Set() });
+  ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), tiptoeType: new Set(), supplier: new Set(), productState: new Set(), b2b: new Set() });
 
 const ProductsView: React.FC<{
   products: Product[] | null; setProducts: (p: Product[]) => void; q: string;
@@ -149,7 +180,7 @@ const ProductsView: React.FC<{
   };
 
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
-    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, barcode: p.barcode, price: p.price,
+    id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui', barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
@@ -161,10 +192,12 @@ const ProductsView: React.FC<{
 
   if (!products) return <div className="loading">Chargement des produits depuis Odoo…</div>;
 
-  const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean) => {
+  const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean, order?: string[]) => {
     const counts = facetCounts(key);
     let keys = Object.keys(counts);
-    keys = isState ? STATES.map((s) => s[0]).filter((k) => counts[k]) : keys.sort();
+    if (order) keys = order.filter((k) => counts[k]);
+    else if (isState) keys = STATES.map((s) => s[0]).filter((k) => counts[k]);
+    else keys = keys.sort();
     const opts = keys.map((k) => (
       <label className={'fopt' + (sets[key].has(k) ? ' sel' : '')} key={k}>
         <input type="checkbox" checked={sets[key].has(k)} onChange={() => toggle(key, k)} />
@@ -184,7 +217,7 @@ const ProductsView: React.FC<{
   return (
     <div className="layout">
       <FilterRail activeCount={activeCount}>
-        {FACETS.map((f) => renderFacet(f.key, f.label, f.scroll, f.state))}
+        {FACETS.map((f) => renderFacet(f.key, f.label, f.scroll, f.state, f.order))}
         <div className="fblock">
           <div className="rh">Statut</div>
           <div className="seg">
@@ -228,7 +261,7 @@ const ProductsView: React.FC<{
                         <div><div className="pname">{p.name}</div>{p.nameEn !== p.name && <div className="psub">{p.nameEn}</div>}</div>
                       </div></td>
                       <td><span className="hchip col">{p.collection || '—'}</span> {p.cat && <span className="hchip">{p.cat}</span>}</td>
-                      <td>{p.tiptoeType ? <span className="tt">{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
+                      <td>{p.tiptoeType ? <span className="tt" style={ttStyle(p.tiptoeType)}>{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
                       <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
                       <td className="dim">{p.dim || '—'}</td>
                       <td className="r"><span className="vcount">{vs.length}</span></td>
@@ -243,7 +276,7 @@ const ProductsView: React.FC<{
                       <tr className="vrow" key={p.id + '-' + i} onClick={() => setSel(p)}>
                         <td className="exp"></td>
                         <td className="code">{v.sku}</td>
-                        <td><span className="swatch" style={{ background: v.color || '#ccd1d8' }}></span>{v.attr}</td>
+                        <td><span className="swatch" style={{ background: colorFor(v.attr) || v.color || '#ccd1d8' }}></span>{v.attr}</td>
                         <td>{v.barcode ? <span className="ean">EAN {v.barcode}</span> : <span className="ean" style={{ color: 'var(--faint)' }}>—</span>}</td>
                         <td></td>
                         <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
@@ -354,7 +387,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
           <div className="dh"><div style={{ flex: 1, minWidth: 0 }}>
             <button className="back" onClick={backToTemplate}>‹ Retour au template</button>
             <div className="dt" style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="swatch" style={{ background: variant.color || '#ccd1d8', width: 16, height: 16 }}></span>{variant.attr}</div>
+              <span className="swatch" style={{ background: colorFor(variant.attr) || variant.color || '#ccd1d8', width: 16, height: 16 }}></span>{variant.attr}</div>
             <div className="dcode">{variant.sku} · product.product · variante de « {product.name} »</div>
           </div><button className="x" onClick={onClose}>✕</button></div>
         ) : (
@@ -458,7 +491,7 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
         <table className="vtable"><thead><tr><th>Attribut</th><th>Référence</th><th>Code-barres</th><th className="r">Prix</th><th></th></tr></thead>
           <tbody>{(vs.length ? vs : [{ sku: p.code, attr: 'variante unique', color: '#ccd1d8', barcode: p.barcode, price: p.price } as any]).map((v: Variant, i: number) => (
             <tr key={i} style={{ cursor: vs.length ? 'pointer' : 'default' }} onClick={() => vs.length && openVariant(i)}>
-              <td><span className="swatch" style={{ background: v.color || '#ccd1d8' }}></span>{v.attr}</td>
+              <td><span className="swatch" style={{ background: colorFor(v.attr) || v.color || '#ccd1d8' }}></span>{v.attr}</td>
               <td className="code">{v.sku}</td><td className="code">{v.barcode || '—'}</td>
               <td className="r price">{money(v.price)}</td>
               <td className="r vopen">{vs.length ? 'détail ›' : ''}</td>
@@ -502,6 +535,8 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
               {fld('Flatpack', 'flatpack', v.flatpack, { select: ['', 'yes', 'no'], hint: 'x_studio_flatpack' })}
               {fld('Gamme / Famille Spidy', 'spidy', v.spidy, { hint: 'x_studio_gamme_famille_spidy' })}
             </div>
+            <div className="sectitle" style={{ marginTop: 18 }}>Code-barres</div>
+            <div className="bcbox"><Barcode value={v.barcode} /></div>
           </>
         ) : (
           <>

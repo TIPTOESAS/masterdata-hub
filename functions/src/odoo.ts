@@ -50,6 +50,7 @@ const VAR_FIELDS = [
   'product_template_attribute_value_ids', 'x_studio_dimensions_variant', 'x_studio_hs_code_variant',
   'x_studio_country_of_origin_variant', 'x_studio_diameter', 'x_studio_dimensions_packed',
   'x_studio_flatpack', 'x_studio_gamme_famille_spidy', 'x_studio_product_state',
+  'x_studio_saleable_in_wholesale',
 ];
 
 // data: URL à partir d'un base64 Odoo (détection du format sur la signature).
@@ -124,6 +125,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       attr: (v.product_template_attribute_value_ids || []).map((id: number) => avNames[id]).filter(Boolean).join(' / ') || 'variante unique',
       color: '',
       state: v.x_studio_product_state || '',
+      b2b: !!v.x_studio_saleable_in_wholesale,
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,
@@ -150,6 +152,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
     code: t.default_code || '',
     image: imgDataUrl(t.image_128),
     productState: states[0] || '',
+    b2b: tvars.some((v: any) => v.b2b) ? 'Oui' : 'Non',
     name: t.name || '',
     nameEn: t.name || '',
     nameDe: t.name || '',

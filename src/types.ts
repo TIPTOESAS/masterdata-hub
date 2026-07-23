@@ -7,6 +7,7 @@ export interface Variant {
   color?: string;           // couleur d'affichage (swatch)
   barcode: string;
   state: string;            // x_studio_product_state (dev/soon/prod/end_of_life/old)
+  b2b: boolean;             // x_studio_saleable_in_wholesale (Available in b2b)
   price: number;            // lst_price
   cost: number;             // standard_price
   weight: number;
@@ -28,6 +29,8 @@ export interface Product {
   code: string;             // default_code
   image: string;            // image_128 en data:URL ('' si aucune)
   productState: string;     // x_studio_product_state représentatif (1re variante)
+  b2b: string;              // 'Oui'/'Non' — au moins une variante saleable_in_wholesale
+
   name: string;             // nom (fr)
   nameEn: string;
   nameDe: string;

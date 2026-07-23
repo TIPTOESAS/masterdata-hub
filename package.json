@@ -4,7 +4,9 @@
   "private": true,
   "description": "Hub Master Data Produit TIPTOE — hiérarchie, template/variantes, logistique, dimensions, pricing, traductions, BOM ; lecture + écriture Odoo.",
   "dependencies": {
+    "@types/jsbarcode": "^3.11.4",
     "firebase": "^12.15.0",
+    "jsbarcode": "^3.12.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-scripts": "5.0.1",
@@ -23,10 +25,20 @@
     "deploy": "npm run build && firebase deploy --only hosting"
   },
   "eslintConfig": {
-    "extends": ["react-app"]
+    "extends": [
+      "react-app"
+    ]
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
