@@ -181,8 +181,10 @@ const ProductsView: React.FC<{
     if (status === 'sale' && !p.saleOk) return false;
     if (status === 'purchase' && !p.buyOk) return false;
     if (q) {
-      const h = (p.code + ' ' + p.name + ' ' + p.nameEn + ' ' + p.barcode + ' ' + p.tiptoeRef).toLowerCase();
-      if (!h.includes(q)) return false;
+      const base = (p.code + ' ' + p.name + ' ' + p.nameEn + ' ' + p.barcode + ' ' + p.tiptoeRef).toLowerCase();
+      // recherche aussi par SKU / code-barres / attribut de variante
+      const inVariants = p.variants.some((v) => (v.sku + ' ' + v.barcode + ' ' + v.attr).toLowerCase().includes(q));
+      if (!base.includes(q) && !inVariants) return false;
     }
     return true;
   }, [sets, status, q]);
@@ -294,7 +296,8 @@ const ProductsView: React.FC<{
             </tr></thead>
             <tbody>
               {list.map((p) => {
-                const vsPairs = effVariants(p).map((v, i) => ({ v, i })).filter(({ v }) => variantMatch(v)); const open = expanded.has(p.id);
+                const vsPairs = effVariants(p).map((v, i) => ({ v, i })).filter(({ v }) => variantMatch(v));
+                const open = expanded.has(p.id) || (q.length >= 2 && vsPairs.some(({ v }) => (v.sku + ' ' + v.barcode).toLowerCase().includes(q)));
                 return (
                   <React.Fragment key={p.id}>
                     <tr className={'trow' + (open ? ' open' : '')}
