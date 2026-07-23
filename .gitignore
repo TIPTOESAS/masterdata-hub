@@ -1,0 +1,24 @@
+# deps
+node_modules/
+functions/node_modules/
+functions/lib/
+
+# build
+build/
+.firebase/
+
+# env / secrets — NE JAMAIS COMMITER
+.env
+.env.*
+!.env.example
+functions/.env
+functions/.env.*
+!functions/.env.example
+
+# logs
+*-debug.log
+firebase-debug.log
+npm-debug.log*
+
+# misc
+.DS_Store

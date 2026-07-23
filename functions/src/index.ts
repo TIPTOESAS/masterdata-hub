@@ -1,0 +1,53 @@
+import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
+import { setGlobalOptions } from 'firebase-functions/v2';
+import { listProducts, listBoms, getTranslations, writeRecord, OdooConfig } from './odoo';
+
+setGlobalOptions({ region: 'europe-west1', maxInstances: 5 });
+
+const ODOO_URL = defineSecret('ODOO_URL');
+const ODOO_DB = defineSecret('ODOO_DB');
+const ODOO_USER = defineSecret('ODOO_USER');
+const ODOO_KEY = defineSecret('ODOO_KEY');
+const secrets = [ODOO_URL, ODOO_DB, ODOO_USER, ODOO_KEY];
+
+function cfg(): OdooConfig {
+  return { url: ODOO_URL.value(), db: ODOO_DB.value(), user: ODOO_USER.value(), key: ODOO_KEY.value() };
+}
+
+// Garde : uniquement les comptes @tiptoe.fr authentifiés.
+function guard(req: CallableRequest) {
+  const email = req.auth?.token?.email as string | undefined;
+  if (!email || !/@tiptoe\.fr$/.test(email)) {
+    throw new HttpsError('permission-denied', 'Accès réservé aux comptes @tiptoe.fr');
+  }
+}
+
+const WRITABLE = new Set(['product.template', 'product.product', 'product.pricelist.item']);
+
+export const odooListProducts = onCall({ secrets }, async (req) => {
+  guard(req);
+  const limit = typeof req.data?.limit === 'number' ? req.data.limit : 400;
+  return listProducts(cfg(), { limit });
+});
+
+export const odooListBoms = onCall({ secrets }, async (req) => {
+  guard(req);
+  return listBoms(cfg(), { productTmplId: req.data?.productTmplId ?? null });
+});
+
+export const odooTranslations = onCall({ secrets }, async (req) => {
+  guard(req);
+  const id = Number(req.data?.tmplId);
+  if (!id) throw new HttpsError('invalid-argument', 'tmplId requis');
+  return getTranslations(cfg(), id);
+});
+
+export const odooWrite = onCall({ secrets }, async (req) => {
+  guard(req);
+  const { model, id, values } = req.data || {};
+  if (!WRITABLE.has(model)) throw new HttpsError('invalid-argument', `Modèle non autorisé: ${model}`);
+  if (!id || typeof values !== 'object') throw new HttpsError('invalid-argument', 'id/values requis');
+  const ok = await writeRecord(cfg(), model, Number(id), values);
+  return { ok };
+});

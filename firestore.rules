@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Accès réservé aux comptes @tiptoe.fr. Les écritures Odoo passent par les
+    // Cloud Functions (admin) ; le front lit/écrit l'historique en @tiptoe.fr.
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.auth.token.email.matches('.*@tiptoe[.]fr$');
+    }
+  }
+}
