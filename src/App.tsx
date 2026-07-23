@@ -4,6 +4,7 @@ import { onAuthChange, signOutUser } from './services/auth';
 import { fetchProducts, fetchBoms, writeOdoo } from './services/odoo';
 import { Product, Variant, Bom } from './types';
 import { colorFor } from './colors';
+import { hsDescription } from './hsCodes';
 import Login from './components/Login';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
@@ -190,6 +191,15 @@ const ProductsView: React.FC<{
     setSel(updated);
   };
 
+  // codes HS existants (variantes) triés par fréquence, avec description -> aide à la saisie
+  const hsOptions = useMemo(() => {
+    const freq: Record<string, number> = {};
+    (products || []).forEach((p) => p.variants.forEach((v) => { if (v.hsVariant) freq[v.hsVariant] = (freq[v.hsVariant] || 0) + 1; }));
+    return Object.keys(freq).sort((a, b) => freq[b] - freq[a]).map((code) => {
+      const d = hsDescription(code); return { value: code, label: d ? `${code} — ${d}` : code };
+    });
+  }, [products]);
+
   if (!products) return <div className="loading">Chargement des produits depuis Odoo…</div>;
 
   const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean, order?: string[]) => {
@@ -295,7 +305,7 @@ const ProductsView: React.FC<{
         </div>
       </main>
 
-      {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} />}
+      {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} />}
     </div>
   );
 };
@@ -307,7 +317,7 @@ const TABS: [string, string][] = [
 ];
 const SUPERS = ['sofa', 'accessory', 'chair_and_stool', 'various', 'shelf', 'lamp', 'professional_furniture', 'table_leg', 'storage', 'table_and_desk'];
 
-const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Product) => void }> = ({ product, onClose, onWrite }) => {
+const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Product) => void; hsOptions: { value: string; label: string }[] }> = ({ product, onClose, onWrite, hsOptions }) => {
   const [tab, setTab] = useState('general');
   const [variantIdx, setVariantIdx] = useState<number | null>(null);
   const [edits, setEdits] = useState<Edits>({});
@@ -360,17 +370,22 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
   const cur = (key: string, orig: any) => (key in edits ? edits[key] : orig);
   const isDirty = (key: string, orig: any) => key in edits && String(edits[key]) !== String(orig);
 
-  const fld = (label: string, key: string, orig: any, opts: { full?: boolean; ro?: boolean; hint?: string; select?: string[] } = {}) => {
+  const fld = (label: string, key: string, orig: any, opts: { full?: boolean; ro?: boolean; hint?: string; select?: string[]; list?: { value: string; label: string }[] } = {}) => {
     const val = cur(key, orig ?? '');
     const dc = !opts.ro && isDirty(key, orig ?? '') ? ' dirty' : '';
     const lab = <label>{label}{opts.hint && <span className="fhint">{opts.hint}</span>}</label>;
+    const dlId = 'dl-' + key;
     return (
       <div className={'field' + (opts.full ? ' full' : '')} key={key}>
         {lab}
         {opts.select
           ? <select className={'in' + dc} value={String(val)} disabled={opts.ro} onChange={(e) => setField(key, orig ?? '', e.target.value)}>
               {opts.select.map((o) => <option key={o}>{o}</option>)}</select>
-          : <input className={'in' + dc} value={String(val ?? '')} readOnly={opts.ro} onChange={(e) => setField(key, orig ?? '', e.target.value)} />}
+          : <>
+              <input className={'in' + dc} value={String(val ?? '')} readOnly={opts.ro} list={opts.list ? dlId : undefined}
+                onChange={(e) => setField(key, orig ?? '', e.target.value)} />
+              {opts.list && <datalist id={dlId}>{opts.list.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</datalist>}
+            </>}
       </div>
     );
   };
@@ -406,7 +421,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
         )}
 
         {variant
-          ? <VariantBody variant={variant} fld={fld} />
+          ? <VariantBody variant={variant} fld={fld} product={product} hsOptions={hsOptions} />
           : (
             <>
               <div className="dtabs">{TABS.map(([k, l]) => (
@@ -511,8 +526,8 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
 };
 
 // ---- variant body: fields + pricing ----
-const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld }) => {
-  const [vtab, setVtab] = useState<'fields' | 'pricing'>('fields');
+const VariantBody: React.FC<{ variant: Variant; fld: any; product: Product; hsOptions: { value: string; label: string }[] }> = ({ variant: v, fld, product, hsOptions }) => {
+  const [vtab, setVtab] = useState<'fields' | 'pricing' | 'label'>('fields');
   const base = v.pricePublic;                                  // marge calculée sur le public HT
   const marginAbs = base != null ? base - v.cost : null;
   const marginPct = base ? Math.round((marginAbs! / base) * 1000) / 10 : null;
@@ -521,6 +536,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
       <div className="dtabs">
         <span className={'dtab' + (vtab === 'fields' ? ' on' : '')} onClick={() => setVtab('fields')}>Champs</span>
         <span className={'dtab' + (vtab === 'pricing' ? ' on' : '')} onClick={() => setVtab('pricing')}>Pricing</span>
+        <span className={'dtab' + (vtab === 'label' ? ' on' : '')} onClick={() => setVtab('label')}>Étiquette</span>
       </div>
       <div className="dbody">
         {vtab === 'fields' ? (
@@ -536,7 +552,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
               {fld('Dimensions (variante)', 'dimVariant', v.dimVariant, { full: true, hint: 'x_studio_dimensions_variant' })}
               {fld('Dimensions emballé', 'dimPacked', v.dimPacked, { hint: 'x_studio_dimensions_packed' })}
               {fld('Diamètre', 'diameter', v.diameter, { hint: 'x_studio_diameter' })}
-              {fld('Code HS (variante)', 'hsVariant', v.hsVariant, { hint: 'x_studio_hs_code_variant' })}
+              {fld('Code HS (variante)', 'hsVariant', v.hsVariant, { hint: 'x_studio_hs_code_variant', list: hsOptions })}
               {fld('Origine (variante)', 'origin', v.origin, { ro: true, hint: 'x_studio_country_of_origin_variant' })}
               {fld('Flatpack', 'flatpack', v.flatpack, { select: ['', 'yes', 'no'], hint: 'x_studio_flatpack' })}
               {fld('Gamme / Famille Spidy', 'spidy', v.spidy, { hint: 'x_studio_gamme_famille_spidy' })}
@@ -544,7 +560,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
             <div className="sectitle" style={{ marginTop: 18 }}>Code-barres</div>
             <div className="bcbox"><Barcode value={v.barcode} /></div>
           </>
-        ) : (
+        ) : vtab === 'pricing' ? (
           <>
             <div className="sectitle">Prix par liste — {v.sku} (product.pricelist.item)</div>
             <table className="ptable"><thead><tr><th>Liste de prix</th><th>Devise</th><th className="r">Prix</th><th>Règle</th></tr></thead>
@@ -560,8 +576,43 @@ const VariantBody: React.FC<{ variant: Variant; fld: any }> = ({ variant: v, fld
               </tbody></table>
             <div className="cap" style={{ paddingTop: 12 }}>Marge brute = (public HT − coût de revient) / public HT. Prix public & USD = <code>product.pricelist.item</code> fixes ; wholesale hérite d'une règle globale −43%.</div>
           </>
+        ) : (
+          <ProductLabel product={product} variant={v} />
         )}
       </div>
+    </>
+  );
+};
+
+// Reconstruction de l'étiquette produit TIPTOE (logo, SKU, nom FR/EN, couleur, EAN, poids, dimensions colis).
+const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ product, variant: v }) => {
+  const swatch = colorFor(v.attr) || v.color || '#e2e5e9';
+  const dims = v.dimPacked || v.dimVariant || product.dim || '';
+  const nameFr = product.name + (v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '');
+  const nameEn = (product.nameEn || product.name) + (v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '');
+  return (
+    <>
+      <div className="sectitle">Aperçu étiquette</div>
+      <div className="label-sheet">
+        <div className="label-logo">TIPTOE</div>
+        <div className="label-sku">{v.sku}</div>
+        <div className="label-mid">
+          <div className="label-names">
+            <div className="label-fr">{nameFr}</div>
+            <div className="label-div"></div>
+            <div className="label-en">{nameEn}</div>
+          </div>
+          <div className="label-swatch" style={{ background: swatch }}></div>
+        </div>
+        <div className="label-bottom">
+          <div className="label-bc">{v.barcode ? <Barcode value={v.barcode} /> : <span className="cap">pas d'EAN</span>}</div>
+          <div className="label-meta">
+            <div>{v.weight ? `${v.weight} kg` : ''}</div>
+            <div className="label-dims">{dims}</div>
+          </div>
+        </div>
+      </div>
+      <div className="cap" style={{ paddingTop: 10 }}>Reconstruction à partir des champs Odoo (nom, couleur, EAN, poids, dimensions emballé). Onglet indicatif.</div>
     </>
   );
 };
