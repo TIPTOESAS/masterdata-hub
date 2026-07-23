@@ -52,6 +52,8 @@ const VAR_MAP: Record<string, string> = {
   b2b: 'x_studio_saleable_in_wholesale',
 };
 const NUMERIC = new Set(['price', 'cost', 'weight', 'volume', 'transport']);
+// Admins autorisés à écrire dans Odoo. Les autres @tiptoe.fr sont en lecture seule.
+const ADMIN_EMAILS = new Set(['bastien@tiptoe.fr', 'brice@tiptoe.fr']);
 
 const STATES: [string, string][] = [['dev', 'Development'], ['soon', 'Upcoming'], ['prod', 'Active'], ['end_of_life', 'End of Life'], ['old', 'Old']];
 const stateLabel = (s: string) => STATES.find((x) => x[0] === s)?.[1] || s || '—';
@@ -122,6 +124,7 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
   const [view, setView] = useState<'products' | 'boms'>('products');
   const [products, setProducts] = useState<Product[] | null>(null);
   const [q, setQ] = useState('');
+  const isAdmin = ADMIN_EMAILS.has((user.email || '').toLowerCase());
 
   useEffect(() => { fetchProducts().then(setProducts); }, []);
 
@@ -137,12 +140,13 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
           <input placeholder="Rechercher réf, nom, code-barres…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <div className="env">
           <span className="badge-env">● ODOO · TEST</span>
+          <span className={'badge-role' + (isAdmin ? ' admin' : '')} title={isAdmin ? 'Vous pouvez modifier dans Odoo' : 'Lecture seule — écriture réservée aux admins'}>{isAdmin ? 'ADMIN' : 'LECTURE'}</span>
           <span className="av" title={user.email} onClick={() => signOutUser()}>
             {(user.email || '?')[0].toUpperCase()}</span>
         </div>
       </div>
       {view === 'products'
-        ? <ProductsView products={products} setProducts={setProducts} q={q.toLowerCase()} />
+        ? <ProductsView products={products} setProducts={setProducts} q={q.toLowerCase()} isAdmin={isAdmin} />
         : <BomView q={q.toLowerCase()} />}
     </div>
   );
@@ -153,8 +157,8 @@ const emptySets = (): Record<FKey, Set<string>> =>
   ({ superCat: new Set(), collection: new Set(), cat: new Set(), sub: new Set(), subcol: new Set(), tiptoeType: new Set(), supplier: new Set(), productState: new Set(), b2b: new Set() });
 
 const ProductsView: React.FC<{
-  products: Product[] | null; setProducts: (p: Product[]) => void; q: string;
-}> = ({ products, setProducts, q }) => {
+  products: Product[] | null; setProducts: (p: Product[]) => void; q: string; isAdmin: boolean;
+}> = ({ products, setProducts, q, isAdmin }) => {
   const [sets, setSets] = useState<Record<FKey, Set<string>>>(emptySets());
   const [status, setStatus] = useState('active');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -345,7 +349,7 @@ const ProductsView: React.FC<{
         </div>
       </main>
 
-      {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} />}
+      {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} isAdmin={isAdmin} />}
     </div>
   );
 };
@@ -357,7 +361,7 @@ const TABS: [string, string][] = [
 ];
 const SUPERS = ['sofa', 'accessory', 'chair_and_stool', 'various', 'shelf', 'lamp', 'professional_furniture', 'table_leg', 'storage', 'table_and_desk'];
 
-const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Product) => void; hsOptions: { value: string; label: string }[] }> = ({ product, onClose, onWrite, hsOptions }) => {
+const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Product) => void; hsOptions: { value: string; label: string }[]; isAdmin: boolean }> = ({ product, onClose, onWrite, hsOptions, isAdmin }) => {
   const [tab, setTab] = useState('general');
   const [variantIdx, setVariantIdx] = useState<number | null>(null);
   const [edits, setEdits] = useState<Edits>({});
@@ -411,6 +415,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
   const isDirty = (key: string, orig: any) => key in edits && String(edits[key]) !== String(orig);
 
   const fld = (label: string, key: string, orig: any, opts: { full?: boolean; ro?: boolean; hint?: string; select?: string[]; list?: { value: string; label: string }[] } = {}) => {
+    if (!isAdmin) opts = { ...opts, ro: true };   // non-admin = lecture seule
     const val = cur(key, orig ?? '');
     const dc = !opts.ro && isDirty(key, orig ?? '') ? ' dirty' : '';
     const lab = <label>{label}{opts.hint && <span className="fhint">{opts.hint}</span>}</label>;
@@ -431,7 +436,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
   };
   const tog = (label: string, key: string, orig: boolean) => {
     const on = cur(key, orig) === true || cur(key, orig) === 'true';
-    return <div className="toggle" key={key}><div className={'switch' + (on ? ' on' : '')} onClick={() => setField(key, orig, !on)}></div><span>{label}</span></div>;
+    return <div className="toggle" key={key}><div className={'switch' + (on ? ' on' : '') + (isAdmin ? '' : ' locked')} onClick={() => { if (isAdmin) setField(key, orig, !on); }}></div><span>{label}</span></div>;
   };
 
   return (
@@ -473,11 +478,13 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
           )}
 
         <div className="dfoot">
-          <span className="status">{dirtyCount ? <><b>{dirtyCount} champ{dirtyCount > 1 ? 's' : ''} modifié{dirtyCount > 1 ? 's' : ''}</b> · prêt</> : 'Aucune modification'}</span>
-          <span className="model-tag">→ {variant ? 'product.product' : 'product.template'}</span>
-          <span className="spacer"></span>
-          <button className="btn-ghost" disabled={!dirtyCount || saving} onClick={reset}>Annuler</button>
-          <button className="btn-write" disabled={!dirtyCount || saving} onClick={save}>{saving ? 'Écriture…' : '⬆ Écrire dans Odoo'}</button>
+          {isAdmin ? <>
+            <span className="status">{dirtyCount ? <><b>{dirtyCount} champ{dirtyCount > 1 ? 's' : ''} modifié{dirtyCount > 1 ? 's' : ''}</b> · prêt</> : 'Aucune modification'}</span>
+            <span className="model-tag">→ {variant ? 'product.product' : 'product.template'}</span>
+            <span className="spacer"></span>
+            <button className="btn-ghost" disabled={!dirtyCount || saving} onClick={reset}>Annuler</button>
+            <button className="btn-write" disabled={!dirtyCount || saving} onClick={save}>{saving ? 'Écriture…' : '⬆ Écrire dans Odoo'}</button>
+          </> : <span className="status">🔒 Lecture seule — modification réservée aux administrateurs</span>}
         </div>
       </aside>
       {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
@@ -647,6 +654,13 @@ const labelNames = (product: Product, v: Variant) => {
   return { fr: product.name + suffix, en: (product.nameEn || product.name) + suffix };
 };
 const withMm = (d: string) => (d && !/mm\s*$/i.test(d) ? d + 'mm' : d);
+// "1700x386x450mm" -> "1700 × 386 × 450 mm" (espacé, mm ajouté si absent)
+const formatDims = (d: string) => {
+  if (!d) return '';
+  let s = withMm(d.trim());
+  s = s.replace(/\s*[x×*]\s*/gi, ' × ').replace(/\s*mm\s*$/i, ' mm');
+  return s.replace(/\s+/g, ' ').trim();
+};
 const hexToRgb = (hex: string): [number, number, number] => {
   const h = hex.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
@@ -694,13 +708,14 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
   doc.text(doc.splitTextToSize(en, 40), 3, y);
   const mat = materialFor(v.attr);
   const col = colorFor(v.attr);
-  const sq = (yy: number, hex?: string, img?: string) => {
-    if (img && matMap[img]) doc.addImage(matMap[img], 'JPEG', 46, yy, 11, 11);
-    else { const [r, g, b] = hexToRgb(hex || '#e2e5e9'); doc.setFillColor(r, g, b); doc.rect(46, yy, 11, 11, 'F'); }
+  const sq = (yy: number, size: number, hex?: string, img?: string) => {
+    const x = 57 - size;
+    if (img && matMap[img]) doc.addImage(matMap[img], 'JPEG', x, yy, size, size);
+    else { const [r, g, b] = hexToRgb(hex || '#e2e5e9'); doc.setFillColor(r, g, b); doc.rect(x, yy, size, size, 'F'); }
   };
-  if (mat && col) { sq(15.5, undefined, mat.img); sq(28, col, undefined); }
-  else if (mat) { sq(19, mat.color, mat.img); }
-  else { sq(19, col || v.color, undefined); }
+  if (mat && col) { sq(19, 8.5, undefined, mat.img); sq(28.5, 8.5, col, undefined); }  // deux carrés descendus, plus petits
+  else if (mat) { sq(19, 11, mat.color, mat.img); }
+  else { sq(19, 11, col || v.color, undefined); }
   if (v.barcode) {
     try {
       const cv = document.createElement('canvas');
@@ -712,7 +727,7 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
   doc.setFont('courier','bold'); doc.setFontSize(9);
   if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
   doc.setFontSize(7);
-  if (dims) doc.text(withMm(dims), 57, 47, { align: 'right' });
+  if (dims) doc.text(formatDims(dims), 57, 47, { align: 'right' });
 }
 
 async function loadLogo(): Promise<string | null> {
@@ -752,7 +767,7 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
             <div className="label-div"></div>
             <div className="label-en">{en}</div>
           </div>
-          <div className="label-sw-col">
+          <div className={'label-sw-col' + (mat && col ? ' two' : '')}>
             {mat && <div className="label-swatch" style={{ backgroundImage: `url("${mat.img}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} title="Matière"></div>}
             {col && <div className="label-swatch" style={{ background: col }} title="Couleur"></div>}
             {!mat && !col && <div className="label-swatch" style={{ background: v.color || '#e2e5e9' }}></div>}
@@ -762,7 +777,7 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
           <div className="label-bc">{v.barcode ? <Barcode value={v.barcode} /> : <span className="cap">pas d'EAN</span>}</div>
           <div className="label-meta">
             <div>{v.weight ? `${v.weight} kg` : ''}</div>
-            <div className="label-dims">{withMm(dims)}</div>
+            <div className="label-dims">{formatDims(dims)}</div>
           </div>
         </div>
       </div>

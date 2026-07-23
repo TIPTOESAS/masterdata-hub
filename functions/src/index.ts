@@ -15,11 +15,23 @@ function cfg(): OdooConfig {
   return { url: ODOO_URL.value(), db: ODOO_DB.value(), user: ODOO_USER.value(), key: ODOO_KEY.value() };
 }
 
-// Garde : uniquement les comptes @tiptoe.fr authentifiés.
-function guard(req: CallableRequest) {
-  const email = req.auth?.token?.email as string | undefined;
+// Administrateurs autorisés à écrire dans Odoo (le reste est en lecture seule).
+const ADMINS = new Set(['bastien@tiptoe.fr', 'brice@tiptoe.fr']);
+
+// Garde lecture : tout compte @tiptoe.fr authentifié.
+function guard(req: CallableRequest): string {
+  const email = (req.auth?.token?.email as string | undefined)?.toLowerCase();
   if (!email || !/@tiptoe\.fr$/.test(email)) {
     throw new HttpsError('permission-denied', 'Accès réservé aux comptes @tiptoe.fr');
+  }
+  return email;
+}
+
+// Garde écriture : uniquement les administrateurs.
+function guardAdmin(req: CallableRequest) {
+  const email = guard(req);
+  if (!ADMINS.has(email)) {
+    throw new HttpsError('permission-denied', 'Modification réservée aux administrateurs (Bastien, Brice).');
   }
 }
 
@@ -44,7 +56,7 @@ export const odooTranslations = onCall({ secrets }, async (req) => {
 });
 
 export const odooWrite = onCall({ secrets }, async (req) => {
-  guard(req);
+  guardAdmin(req);
   const { model, id, values } = req.data || {};
   if (!WRITABLE.has(model)) throw new HttpsError('invalid-argument', `Modèle non autorisé: ${model}`);
   if (!id || typeof values !== 'object') throw new HttpsError('invalid-argument', 'id/values requis');
