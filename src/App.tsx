@@ -207,9 +207,15 @@ const ProductsView: React.FC<{
   // sélection multiple de variantes (pour impression groupée d'étiquettes)
   const vkey = (pid: number, i: number) => `${pid}::${i}`;
   const toggleVar = (k: string) => setSelVar((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  const setVarsForProduct = (p: Product, vs: Variant[], on: boolean) => setSelVar((s) => {
-    const n = new Set(s); vs.forEach((_, i) => { const k = vkey(p.id, i); on ? n.add(k) : n.delete(k); }); return n;
+  const setVars = (pid: number, indices: number[], on: boolean) => setSelVar((s) => {
+    const n = new Set(s); indices.forEach((i) => { const k = vkey(pid, i); on ? n.add(k) : n.delete(k); }); return n;
   });
+  // filtres au niveau variante (B2B, statut) -> masquent les sous-lignes qui ne correspondent pas
+  const variantMatch = (v: Variant) => {
+    if (sets.productState.size && !sets.productState.has(v.state)) return false;
+    if (sets.b2b.size && !sets.b2b.has(v.b2b ? 'Oui' : 'Non')) return false;
+    return true;
+  };
   const selectedItems = (): { product: Product; variant: Variant }[] => {
     const items: { product: Product; variant: Variant }[] = [];
     (products || []).forEach((p) => effVariants(p).forEach((v, i) => { if (selVar.has(vkey(p.id, i))) items.push({ product: p, variant: v }); }));
@@ -284,7 +290,7 @@ const ProductsView: React.FC<{
             </tr></thead>
             <tbody>
               {list.map((p) => {
-                const vs = effVariants(p); const open = expanded.has(p.id);
+                const vsPairs = effVariants(p).map((v, i) => ({ v, i })).filter(({ v }) => variantMatch(v)); const open = expanded.has(p.id);
                 return (
                   <React.Fragment key={p.id}>
                     <tr className={'trow' + (open ? ' open' : '')}
@@ -294,8 +300,8 @@ const ProductsView: React.FC<{
                         } else setSel(p);
                       }}>
                       <td className="chk" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={vs.every((_, i) => selVar.has(vkey(p.id, i)))}
-                          onChange={(e) => setVarsForProduct(p, vs, e.target.checked)} /></td>
+                        <input type="checkbox" checked={vsPairs.length > 0 && vsPairs.every(({ i }) => selVar.has(vkey(p.id, i)))}
+                          onChange={(e) => setVars(p.id, vsPairs.map((x) => x.i), e.target.checked)} /></td>
                       <td className="exp"><span className={'caret' + (open ? ' open' : '')}>▶</span></td>
                       <td className="code">{p.code || '—'}</td>
                       <td><div className="pcell">
@@ -306,15 +312,15 @@ const ProductsView: React.FC<{
                       <td>{p.tiptoeType ? <span className="tt" style={ttStyle(p.tiptoeType)}>{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
                       <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
                       <td className="dim">{p.dim || '—'}</td>
-                      <td className="r"><span className="vcount">{vs.length}</span></td>
-                      <td className="r price">{money(vs.length ? pubPrice(vs[0]) : p.price)}</td>
+                      <td className="r"><span className="vcount">{vsPairs.length}</span></td>
+                      <td className="r price">{money(vsPairs.length ? pubPrice(vsPairs[0].v) : p.price)}</td>
                       <td><span className="st">
                         <span className={'dot ' + (p.active ? 'on' : 'off')} title={p.active ? 'Actif' : 'Archivé'}></span>
                         <span className={'dot ' + (p.saleOk ? 'sale' : 'off')} title="Vendable"></span>
                         <span className={'dot ' + (p.buyOk ? 'buy' : 'off')} title="Achetable"></span>
                       </span></td>
                     </tr>
-                    {open && vs.map((v, i) => (
+                    {open && vsPairs.map(({ v, i }) => (
                       <tr className="vrow" key={p.id + '-' + i} onClick={() => setSel(p)}>
                         <td className="chk" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={selVar.has(vkey(p.id, i))} onChange={() => toggleVar(vkey(p.id, i))} /></td>
@@ -640,6 +646,7 @@ const labelNames = (product: Product, v: Variant) => {
   const suffix = v.attr && v.attr !== 'variante unique' ? ` — ${v.attr}` : '';
   return { fr: product.name + suffix, en: (product.nameEn || product.name) + suffix };
 };
+const withMm = (d: string) => (d && !/mm\s*$/i.test(d) ? d + 'mm' : d);
 const hexToRgb = (hex: string): [number, number, number] => {
   const h = hex.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
@@ -677,13 +684,13 @@ const imgToPng = (url: string, size: number): Promise<string> =>
 function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, string>, product: Product, v: Variant) {
   if (logo) { const lw = 40, lh = (lw * 192.45) / 904.14; doc.addImage(logo, 'PNG', (60 - lw) / 2, 4.5, lw, lh); }
   doc.setFont('courier', 'bold'); doc.setFontSize(12);
-  doc.text(v.sku || '', 30, 16, { align: 'center' });
+  doc.text(v.sku || '', 30, 18.5, { align: 'center' });
   const { fr, en } = labelNames(product, v);
   doc.setFont('courier', 'normal'); doc.setFontSize(7);
-  let y = 22;
+  let y = 24;
   const frLines = doc.splitTextToSize(fr, 40);
-  doc.text(frLines, 3, y); y += frLines.length * 2.9 + 1.5;
-  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(3, y, 34, y); y += 3;
+  doc.text(frLines, 3, y); y += frLines.length * 2.9 + 1.7;
+  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(8, y, 39, y); y += 3.2;
   doc.text(doc.splitTextToSize(en, 40), 3, y);
   const mat = materialFor(v.attr);
   if (mat && matMap[mat.img]) {
@@ -703,7 +710,7 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
   doc.setFont('courier', 'bold'); doc.setFontSize(9);
   if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
   doc.setFontSize(7);
-  if (dims) doc.text(dims, 57, 47, { align: 'right' });
+  if (dims) doc.text(withMm(dims), 57, 47, { align: 'right' });
 }
 
 async function loadLogo(): Promise<string | null> {
@@ -747,7 +754,7 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
           <div className="label-bc">{v.barcode ? <Barcode value={v.barcode} /> : <span className="cap">pas d'EAN</span>}</div>
           <div className="label-meta">
             <div>{v.weight ? `${v.weight} kg` : ''}</div>
-            <div className="label-dims">{dims}</div>
+            <div className="label-dims">{withMm(dims)}</div>
           </div>
         </div>
       </div>
