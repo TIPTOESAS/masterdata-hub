@@ -151,8 +151,9 @@ tr.bomfirst td{border-top:2px solid var(--line);}
 .label-sku{text-align:center;font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:1px;margin-top:13px;}
 .label-mid{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:16px;flex:1;min-height:0;}
 .label-names{flex:1;min-width:0;font-family:var(--mono);font-size:10px;line-height:1.3;}
-.label-div{border-top:1.5px solid #141414;margin:10px auto;width:76%;}
-.label-swatch{width:64px;height:64px;flex-shrink:0;border:1px solid rgba(0,0,0,.12);}
+.label-div{border-top:1.5px solid #141414;margin:5px auto 10px;width:76%;}
+.label-sw-col{display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.label-swatch{width:58px;height:58px;flex-shrink:0;border:1px solid rgba(0,0,0,.12);background-size:cover;background-position:center;}
 .label-bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:auto;}
 .label-bc svg{max-width:150px;height:auto;}
 .label-meta{text-align:right;font-family:var(--mono);white-space:nowrap;}

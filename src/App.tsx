@@ -693,12 +693,14 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
   doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(8, y, 39, y); y += 3;
   doc.text(doc.splitTextToSize(en, 40), 3, y);
   const mat = materialFor(v.attr);
-  if (mat && matMap[mat.img]) {
-    doc.addImage(matMap[mat.img], 'JPEG', 46, 19, 11, 11);
-  } else {
-    const [r, g, b] = hexToRgb((mat && mat.color) || colorFor(v.attr) || v.color || '#e2e5e9');
-    doc.setFillColor(r, g, b); doc.rect(46, 19, 11, 11, 'F');
-  }
+  const col = colorFor(v.attr);
+  const sq = (yy: number, hex?: string, img?: string) => {
+    if (img && matMap[img]) doc.addImage(matMap[img], 'JPEG', 46, yy, 11, 11);
+    else { const [r, g, b] = hexToRgb(hex || '#e2e5e9'); doc.setFillColor(r, g, b); doc.rect(46, yy, 11, 11, 'F'); }
+  };
+  if (mat && col) { sq(15.5, undefined, mat.img); sq(28, col, undefined); }
+  else if (mat) { sq(19, mat.color, mat.img); }
+  else { sq(19, col || v.color, undefined); }
   if (v.barcode) {
     try {
       const cv = document.createElement('canvas');
@@ -733,6 +735,8 @@ async function exportLabelsPdf(items: { product: Product; variant: Variant }[]) 
 const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ product, variant: v }) => {
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
   const { fr, en } = labelNames(product, v);
+  const mat = materialFor(v.attr);
+  const col = colorFor(v.attr);
   return (
     <>
       <div className="sectitle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -748,7 +752,11 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
             <div className="label-div"></div>
             <div className="label-en">{en}</div>
           </div>
-          <div className="label-swatch" style={swatchStyle(v.attr, v.color)}></div>
+          <div className="label-sw-col">
+            {mat && <div className="label-swatch" style={{ backgroundImage: `url("${mat.img}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} title="Matière"></div>}
+            {col && <div className="label-swatch" style={{ background: col }} title="Couleur"></div>}
+            {!mat && !col && <div className="label-swatch" style={{ background: v.color || '#e2e5e9' }}></div>}
+          </div>
         </div>
         <div className="label-bottom">
           <div className="label-bc">{v.barcode ? <Barcode value={v.barcode} /> : <span className="cap">pas d'EAN</span>}</div>
