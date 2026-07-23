@@ -19,7 +19,7 @@ const Barcode: React.FC<{ value: string }> = ({ value }) => {
     try {
       JsBarcode(ref.current, value, {
         format: /^\d{13}$/.test(value) ? 'EAN13' : 'CODE128',
-        width: 1.7, height: 46, fontSize: 13, margin: 6, background: 'transparent',
+        width: 2, height: 50, fontSize: 14, margin: 6, background: 'transparent',
       });
     } catch { /* code invalide : on n'affiche rien */ }
   }, [value]);
@@ -683,14 +683,14 @@ const imgToPng = (url: string, size: number): Promise<string> =>
 // Dessine une étiquette 6×5 cm sur la page courante (vectoriel : texte + rect ; logo, EAN & matière en image).
 function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, string>, product: Product, v: Variant) {
   if (logo) { const lw = 40, lh = (lw * 192.45) / 904.14; doc.addImage(logo, 'PNG', (60 - lw) / 2, 4.5, lw, lh); }
-  doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.setFont('courier','bold'); doc.setFontSize(12);
   doc.text(v.sku || '', 30, 17, { align: 'center' });
   const { fr, en } = labelNames(product, v);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.setFont('courier','normal'); doc.setFontSize(6.2);
   let y = 22.5;
   const frLines = doc.splitTextToSize(fr, 40);
-  doc.text(frLines, 3, y); y += frLines.length * 2.9 + 1.7;
-  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(8, y, 39, y); y += 3.2;
+  doc.text(frLines, 3, y); y += frLines.length * 2.5 + 1.5;
+  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(8, y, 39, y); y += 3;
   doc.text(doc.splitTextToSize(en, 40), 3, y);
   const mat = materialFor(v.attr);
   if (mat && matMap[mat.img]) {
@@ -702,12 +702,12 @@ function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, strin
   if (v.barcode) {
     try {
       const cv = document.createElement('canvas');
-      JsBarcode(cv, v.barcode, { format: /^\d{13}$/.test(v.barcode) ? 'EAN13' : 'CODE128', width: 2, height: 40, fontSize: 16, margin: 0 });
-      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 39, 31, 9);
+      JsBarcode(cv, v.barcode, { format: /^\d{13}$/.test(v.barcode) ? 'EAN13' : 'CODE128', width: 4, height: 90, fontSize: 26, margin: 0 });
+      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 38, 33, 10);
     } catch { /* EAN invalide */ }
   }
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.setFont('courier','bold'); doc.setFontSize(9);
   if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
   doc.setFontSize(7);
   if (dims) doc.text(withMm(dims), 57, 47, { align: 'right' });
