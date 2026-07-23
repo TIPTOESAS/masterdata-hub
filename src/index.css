@@ -89,7 +89,9 @@ th.r,td.r{text-align:right;}
 tbody td{padding:9px 12px;border-top:1px solid var(--line2);vertical-align:middle;}
 tbody tr{cursor:pointer;}
 tbody tr:hover{background:color-mix(in srgb,var(--accent) 5%,transparent);}
-td.exp{width:24px;text-align:center;padding-left:8px;padding-right:0;}
+td.chk{width:30px;text-align:center;padding-left:10px;padding-right:0;}
+td.chk input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px;margin:0;}
+td.exp{width:24px;text-align:center;padding-left:6px;padding-right:0;}
 .caret{display:inline-block;color:var(--faint);transition:transform .15s;font-size:10px;}
 .caret.open{transform:rotate(90deg);color:var(--accent);}
 tr.trow.open{background:color-mix(in srgb,var(--accent) 4%,transparent);}
@@ -144,7 +146,7 @@ tr.bomfirst td{border-top:2px solid var(--line);}
 .barcode{max-width:100%;height:auto;}
 
 /* étiquette produit 5×5 cm (rendu fidèle à l'imprimé — toujours clair) */
-.label-sheet{background:#fff;color:#141414;border:1px solid #dcdfe3;border-radius:6px;width:360px;height:360px;padding:16px 18px;display:flex;flex-direction:column;box-sizing:border-box;}
+.label-sheet{background:#fff;color:#141414;border:1px solid #dcdfe3;border-radius:6px;width:432px;height:360px;padding:16px 20px;display:flex;flex-direction:column;box-sizing:border-box;}
 .label-logo-img{display:block;width:64%;height:auto;margin:6px auto 0;}
 .label-sku{text-align:center;font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:1px;margin-top:9px;}
 .label-mid{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:14px;flex:1;min-height:0;}

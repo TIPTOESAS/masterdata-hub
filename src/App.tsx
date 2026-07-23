@@ -5,6 +5,7 @@ import { onAuthChange, signOutUser } from './services/auth';
 import { fetchProducts, fetchBoms, writeOdoo } from './services/odoo';
 import { Product, Variant, Bom } from './types';
 import { colorFor } from './colors';
+import { materialFor } from './materials';
 import { hsDescription } from './hsCodes';
 import Login from './components/Login';
 import { httpsCallable } from 'firebase/functions';
@@ -30,6 +31,12 @@ const money = (v: number | null, cur = '€') =>
   v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
 // Prix de vente affiché = toujours le Public Pricelist HT (fallback list_price si absent).
 const pubPrice = (v: { pricePublic: number | null; price: number }) => (v.pricePublic != null ? v.pricePublic : v.price);
+// Style de vignette : texture matière si reconnue, sinon couleur de la palette.
+const swatchStyle = (attr: string, color?: string): React.CSSProperties => {
+  const m = materialFor(attr);
+  if (m) return { backgroundImage: `url("${m.img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  return { background: colorFor(attr) || color || '#ccd1d8' };
+};
 const cap = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
 const TMPL_MAP: Record<string, string> = {
@@ -152,6 +159,7 @@ const ProductsView: React.FC<{
   const [status, setStatus] = useState('active');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sel, setSel] = useState<Product | null>(null);
+  const [selVar, setSelVar] = useState<Set<string>>(new Set());
 
   const toggle = (key: FKey, v: string) => {
     setSets((s) => { const n = { ...s, [key]: new Set(s[key]) }; n[key].has(v) ? n[key].delete(v) : n[key].add(v); return n; });
@@ -194,6 +202,18 @@ const ProductsView: React.FC<{
   const applyWrite = (updated: Product) => {
     setProducts((products || []).map((p) => (p.id === updated.id ? updated : p)));
     setSel(updated);
+  };
+
+  // sélection multiple de variantes (pour impression groupée d'étiquettes)
+  const vkey = (pid: number, i: number) => `${pid}::${i}`;
+  const toggleVar = (k: string) => setSelVar((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const setVarsForProduct = (p: Product, vs: Variant[], on: boolean) => setSelVar((s) => {
+    const n = new Set(s); vs.forEach((_, i) => { const k = vkey(p.id, i); on ? n.add(k) : n.delete(k); }); return n;
+  });
+  const selectedItems = (): { product: Product; variant: Variant }[] => {
+    const items: { product: Product; variant: Variant }[] = [];
+    (products || []).forEach((p) => effVariants(p).forEach((v, i) => { if (selVar.has(vkey(p.id, i))) items.push({ product: p, variant: v }); }));
+    return items;
   };
 
   // codes HS existants (variantes) triés par fréquence, avec description -> aide à la saisie
@@ -248,6 +268,10 @@ const ProductsView: React.FC<{
           <h1>Produits</h1>
           <span className="count">{list.length} template{list.length > 1 ? 's' : ''} · {products.length} chargés</span>
           <div className="actions">
+            {selVar.size > 0 && <>
+              <button className="btn primary" onClick={() => exportLabelsPdf(selectedItems())}>⬇ Imprimer {selVar.size} étiquette{selVar.size > 1 ? 's' : ''}</button>
+              <button className="btn" onClick={() => setSelVar(new Set())}>Désélectionner</button>
+            </>}
             <button className="btn" onClick={() => setExpanded(expanded.size ? new Set() : new Set(list.map((p) => p.id)))}>
               ⇕ {expanded.size ? 'Tout replier' : 'Tout déplier'}</button>
           </div>
@@ -255,7 +279,7 @@ const ProductsView: React.FC<{
         <div className="tablewrap">
           <table>
             <thead><tr>
-              <th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th><th>Hiérarchie</th>
+              <th style={{ width: 30 }}></th><th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th><th>Hiérarchie</th>
               <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th>Dispo.</th>
             </tr></thead>
             <tbody>
@@ -269,6 +293,9 @@ const ProductsView: React.FC<{
                           const n = new Set(expanded); n.has(p.id) ? n.delete(p.id) : n.add(p.id); setExpanded(n);
                         } else setSel(p);
                       }}>
+                      <td className="chk" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={vs.every((_, i) => selVar.has(vkey(p.id, i)))}
+                          onChange={(e) => setVarsForProduct(p, vs, e.target.checked)} /></td>
                       <td className="exp"><span className={'caret' + (open ? ' open' : '')}>▶</span></td>
                       <td className="code">{p.code || '—'}</td>
                       <td><div className="pcell">
@@ -289,9 +316,11 @@ const ProductsView: React.FC<{
                     </tr>
                     {open && vs.map((v, i) => (
                       <tr className="vrow" key={p.id + '-' + i} onClick={() => setSel(p)}>
+                        <td className="chk" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={selVar.has(vkey(p.id, i))} onChange={() => toggleVar(vkey(p.id, i))} /></td>
                         <td className="exp"></td>
                         <td className="code">{v.sku}</td>
-                        <td><span className="swatch" style={{ background: colorFor(v.attr) || v.color || '#ccd1d8' }}></span>{v.attr}</td>
+                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
                         <td>{v.barcode ? <span className="ean">EAN {v.barcode}</span> : <span className="ean" style={{ color: 'var(--faint)' }}>—</span>}</td>
                         <td></td>
                         <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
@@ -304,7 +333,7 @@ const ProductsView: React.FC<{
                   </React.Fragment>
                 );
               })}
-              {!list.length && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!list.length && <tr><td colSpan={11} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -411,7 +440,7 @@ const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Pro
               <div className="dt" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span>{product.name}</span>
                 <span style={{ color: 'var(--faint)', fontWeight: 400 }}>›</span>
-                <span className="swatch" style={{ background: colorFor(variant.attr) || variant.color || '#ccd1d8', width: 16, height: 16 }}></span>
+                <span className="swatch" style={{ ...swatchStyle(variant.attr, variant.color), width: 16, height: 16 }}></span>
                 <span style={{ color: 'var(--muted)', fontWeight: 500 }}>{variant.attr}</span>
               </div>
               <div className="dcode">{variant.sku} · product.product</div>
@@ -517,7 +546,7 @@ const TemplateBody: React.FC<any> = ({ product: p, tab, fld, tog, openVariant })
         <table className="vtable"><thead><tr><th>Attribut</th><th>Référence</th><th>Code-barres</th><th className="r">Prix</th><th></th></tr></thead>
           <tbody>{(vs.length ? vs : [{ sku: p.code, attr: 'variante unique', color: '#ccd1d8', barcode: p.barcode, price: p.price } as any]).map((v: Variant, i: number) => (
             <tr key={i} style={{ cursor: vs.length ? 'pointer' : 'default' }} onClick={() => vs.length && openVariant(i)}>
-              <td><span className="swatch" style={{ background: colorFor(v.attr) || v.color || '#ccd1d8' }}></span>{v.attr}</td>
+              <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
               <td className="code">{v.sku}</td><td className="code">{v.barcode || '—'}</td>
               <td className="r price">{money(pubPrice(v))}</td>
               <td className="r vopen">{vs.length ? 'détail ›' : ''}</td>
@@ -632,50 +661,76 @@ const svgToPng = (url: string, vbW: number, vbH: number, scale: number): Promise
     img.src = url;
   });
 
-// Génère l'étiquette 5×5 cm en PDF (vectoriel : texte + rect ; logo & code-barres en image).
-async function exportLabelPdf(product: Product, v: Variant) {
-  const doc = new jsPDF({ unit: 'mm', format: [50, 50] });
-  try {
-    const logo = await svgToPng(process.env.PUBLIC_URL + '/tiptoe-logo.svg', 904.14, 192.45, 4);
-    const lw = 34, lh = (lw * 192.45) / 904.14;
-    doc.addImage(logo, 'PNG', (50 - lw) / 2, 4.5, lw, lh);
-  } catch { /* logo indisponible */ }
+// Charge une image (jpg/png) en dataURL carré.
+const imgToPng = (url: string, size: number): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d'); if (!ctx) return reject(new Error('no ctx'));
+      ctx.drawImage(img, 0, 0, size, size); resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject; img.src = url;
+  });
+
+// Dessine une étiquette 6×5 cm sur la page courante (vectoriel : texte + rect ; logo, EAN & matière en image).
+function drawLabel(doc: jsPDF, logo: string | null, matMap: Record<string, string>, product: Product, v: Variant) {
+  if (logo) { const lw = 40, lh = (lw * 192.45) / 904.14; doc.addImage(logo, 'PNG', (60 - lw) / 2, 4.5, lw, lh); }
   doc.setFont('courier', 'bold'); doc.setFontSize(12);
-  doc.text(v.sku || '', 25, 15.5, { align: 'center' });
+  doc.text(v.sku || '', 30, 16, { align: 'center' });
   const { fr, en } = labelNames(product, v);
-  doc.setFont('courier', 'normal'); doc.setFontSize(6.6);
-  let y = 21;
-  const frLines = doc.splitTextToSize(fr, 30);
-  doc.text(frLines, 3, y); y += frLines.length * 2.7 + 1.5;
-  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(3, y, 26, y); y += 3;
-  doc.text(doc.splitTextToSize(en, 30), 3, y);
-  const [r, g, b] = hexToRgb(colorFor(v.attr) || v.color || '#e2e5e9');
-  doc.setFillColor(r, g, b); doc.rect(36.5, 20, 10.5, 10.5, 'F');
+  doc.setFont('courier', 'normal'); doc.setFontSize(7);
+  let y = 22;
+  const frLines = doc.splitTextToSize(fr, 40);
+  doc.text(frLines, 3, y); y += frLines.length * 2.9 + 1.5;
+  doc.setDrawColor(20); doc.setLineWidth(0.3); doc.line(3, y, 34, y); y += 3;
+  doc.text(doc.splitTextToSize(en, 40), 3, y);
+  const mat = materialFor(v.attr);
+  if (mat && matMap[mat.img]) {
+    doc.addImage(matMap[mat.img], 'JPEG', 46, 19, 11, 11);
+  } else {
+    const [r, g, b] = hexToRgb((mat && mat.color) || colorFor(v.attr) || v.color || '#e2e5e9');
+    doc.setFillColor(r, g, b); doc.rect(46, 19, 11, 11, 'F');
+  }
   if (v.barcode) {
     try {
       const cv = document.createElement('canvas');
       JsBarcode(cv, v.barcode, { format: /^\d{13}$/.test(v.barcode) ? 'EAN13' : 'CODE128', width: 2, height: 40, fontSize: 16, margin: 0 });
-      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 39, 27, 9);
+      doc.addImage(cv.toDataURL('image/png'), 'PNG', 3, 39, 31, 9);
     } catch { /* EAN invalide */ }
   }
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
   doc.setFont('courier', 'bold'); doc.setFontSize(9);
-  if (v.weight) doc.text(`${v.weight} kg`, 47, 42.5, { align: 'right' });
+  if (v.weight) doc.text(`${v.weight} kg`, 57, 43, { align: 'right' });
   doc.setFontSize(7);
-  if (dims) doc.text(dims, 47, 46.5, { align: 'right' });
-  doc.save(`${v.sku || 'etiquette'}.pdf`);
+  if (dims) doc.text(dims, 57, 47, { align: 'right' });
+}
+
+async function loadLogo(): Promise<string | null> {
+  try { return await svgToPng(process.env.PUBLIC_URL + '/tiptoe-logo.svg', 904.14, 192.45, 4); } catch { return null; }
+}
+
+// Génère un PDF (une page 6×5 cm par variante) pour 1..N articles.
+async function exportLabelsPdf(items: { product: Product; variant: Variant }[]) {
+  if (!items.length) return;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [60, 50] });
+  const logo = await loadLogo();
+  const urls = Array.from(new Set(items.map((it) => materialFor(it.variant.attr)?.img).filter(Boolean) as string[]));
+  const matMap: Record<string, string> = {};
+  await Promise.all(urls.map(async (u) => { try { matMap[u] = await imgToPng(u, 240); } catch { /* skip */ } }));
+  items.forEach((it, i) => { if (i > 0) doc.addPage([60, 50], 'landscape'); drawLabel(doc, logo, matMap, it.product, it.variant); });
+  doc.save(items.length === 1 ? `${items[0].variant.sku || 'etiquette'}.pdf` : `etiquettes-${items.length}.pdf`);
 }
 
 // Reconstruction de l'étiquette produit TIPTOE au format 5×5 cm.
 const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ product, variant: v }) => {
-  const swatch = colorFor(v.attr) || v.color || '#e2e5e9';
   const dims = v.dimPacked || v.dimVariant || product.dim || '';
   const { fr, en } = labelNames(product, v);
   return (
     <>
       <div className="sectitle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>Étiquette · 5 × 5 cm</span>
-        <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => exportLabelPdf(product, v)}>⬇ Télécharger PDF</button>
+        <span>Étiquette · 6 × 5 cm</span>
+        <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => exportLabelsPdf([{ product, variant: v }])}>⬇ Télécharger PDF</button>
       </div>
       <div className="label-sheet">
         <img className="label-logo-img" src={process.env.PUBLIC_URL + '/tiptoe-logo.svg'} alt="TIPTOE" />
@@ -686,7 +741,7 @@ const ProductLabel: React.FC<{ product: Product; variant: Variant }> = ({ produc
             <div className="label-div"></div>
             <div className="label-en">{en}</div>
           </div>
-          <div className="label-swatch" style={{ background: swatch }}></div>
+          <div className="label-swatch" style={swatchStyle(v.attr, v.color)}></div>
         </div>
         <div className="label-bottom">
           <div className="label-bc">{v.barcode ? <Barcode value={v.barcode} /> : <span className="cap">pas d'EAN</span>}</div>
