@@ -73,9 +73,9 @@ type Edits = Record<string, string | boolean>;
 // clé de facette -> propriété du produit
 type FKey = 'superCat' | 'collection' | 'cat' | 'sub' | 'subcol' | 'supplier' | 'productState' | 'tiptoeType' | 'b2b';
 const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean; order?: string[] }[] = [
+  { key: 'b2b', label: 'Catalogue B2B', order: ['Oui', 'Non'] },
   { key: 'tiptoeType', label: 'TipToe type', scroll: true },
   { key: 'productState', label: 'Statut', state: true },
-  { key: 'b2b', label: 'Catalogue B2B', order: ['Oui', 'Non'] },
   { key: 'superCat', label: 'Super-catégorie' },
   { key: 'collection', label: 'Collection', scroll: true },
   { key: 'cat', label: 'Catégorie', scroll: true },
