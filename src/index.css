@@ -99,8 +99,9 @@ code{font-family:var(--mono);}
 .price.ttc{color:var(--muted);font-weight:600;}
 tr.frow{cursor:pointer;}
 tr.frow:hover{background:color-mix(in srgb,var(--accent) 5%,transparent);}
-tr.frow.tsep td{border-top:1px solid var(--line);}
 .tdim{color:var(--faint);}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{color:var(--ink);}
 th.chk input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px;margin:0;}
 table{width:100%;border-collapse:collapse;}
 thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--faint);font-weight:700;padding:9px 12px;border-bottom:1px solid var(--line2);white-space:nowrap;}

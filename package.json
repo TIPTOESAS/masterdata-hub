@@ -5,6 +5,7 @@
   "description": "Hub Master Data Produit TIPTOE — hiérarchie, template/variantes, logistique, dimensions, pricing, traductions, BOM ; lecture + écriture Odoo.",
   "dependencies": {
     "@types/jsbarcode": "^3.11.4",
+    "exceljs": "^4.4.0",
     "firebase": "^12.15.0",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",

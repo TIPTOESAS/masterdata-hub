@@ -169,6 +169,7 @@ const ProductsView: React.FC<{
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [sort, setSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'template', dir: 1 });
 
   const toggle = (key: FKey, v: string) => {
     setSets((s) => { const n = { ...s, [key]: new Set(s[key]) }; n[key].has(v) ? n[key].delete(v) : n[key].add(v); return n; });
@@ -260,12 +261,14 @@ const ProductsView: React.FC<{
     if (!ids.length) return;
     setExporting(true);
     try {
-      const { headers, rows } = await fetchExport(ids);
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Product');
-      XLSX.writeFile(wb, `masterdata-export-${ids.length}.xlsx`);
+      const { filename, b64 } = await fetchExport(ids);
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+      URL.revokeObjectURL(a.href);
       setToast({ msg: `✓ Export de ${ids.length} variante(s)` });
     } catch (e) {
       setToast({ msg: '✗ Export échoué : ' + (e instanceof Error ? e.message : String(e)), err: true });
@@ -288,6 +291,24 @@ const ProductsView: React.FC<{
   const variantCount = flatRows.length;
   const allKeys = flatRows.map((r) => vkey(r.p.id, r.i));
   const allSelected = allKeys.length > 0 && allKeys.every((k) => selVar.has(k));
+
+  // tri par colonne (alpha ou numérique)
+  const SORTCOLS: Record<string, { get: (r: { p: Product; v: Variant }) => any; num?: boolean }> = {
+    template: { get: (r) => r.p.name }, ref: { get: (r) => r.v.sku }, variante: { get: (r) => r.v.attr },
+    superCat: { get: (r) => r.p.superCat }, collection: { get: (r) => r.p.collection }, subcol: { get: (r) => r.p.subcol },
+    cat: { get: (r) => r.p.cat }, sub: { get: (r) => r.p.sub }, type: { get: (r) => r.p.tiptoeType },
+    state: { get: (r) => r.v.state }, dim: { get: (r) => r.v.dimVariant }, created: { get: (r) => r.v.createdOn },
+    ht: { get: (r) => pubPrice(r.v), num: true }, ttc: { get: (r) => pubPrice(r.v) * 1.2, num: true },
+    active: { get: (r) => (r.p.active ? 1 : 0), num: true }, sale: { get: (r) => (r.p.saleOk ? 1 : 0), num: true }, buy: { get: (r) => (r.p.buyOk ? 1 : 0), num: true },
+  };
+  const sc = SORTCOLS[sort.col] || SORTCOLS.template;
+  const sortedRows = [...flatRows].sort((a, b) => {
+    const av = sc.get(a), bv = sc.get(b);
+    if (sc.num) return ((av || 0) - (bv || 0)) * sort.dir;
+    return String(av || '').localeCompare(String(bv || ''), 'fr', { numeric: true }) * sort.dir;
+  });
+  const sortBy = (col: string) => setSort((s) => ({ col, dir: s.col === col ? (s.dir === 1 ? -1 : 1) : 1 }));
+  const arrow = (col: string) => (sort.col === col ? (sort.dir === 1 ? ' ▲' : ' ▼') : '');
 
   const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean, order?: string[]) => {
     const counts = facetCounts(key);
@@ -359,22 +380,35 @@ const ProductsView: React.FC<{
           <table>
             <thead><tr>
               <th className="chk"><input type="checkbox" checked={allSelected} onChange={(e) => setSelVar(e.target.checked ? new Set(allKeys) : new Set())} /></th>
-              <th>Template</th><th>Référence</th><th>Variante</th>
-              <th>Super-cat.</th><th>Collection</th><th>Sous-collection</th><th>Catégorie</th><th>Sous-catégorie</th>
-              <th>TipToe type</th><th>État</th><th>Dimensions</th><th>Créé le</th><th className="r">Prix HT</th><th className="r">Prix TTC</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
+              <th className="sortable" onClick={() => sortBy('template')}>Template{arrow('template')}</th>
+              <th className="sortable" onClick={() => sortBy('ref')}>Référence{arrow('ref')}</th>
+              <th className="sortable" onClick={() => sortBy('variante')}>Variante{arrow('variante')}</th>
+              <th className="sortable" onClick={() => sortBy('superCat')}>Super-cat.{arrow('superCat')}</th>
+              <th className="sortable" onClick={() => sortBy('collection')}>Collection{arrow('collection')}</th>
+              <th className="sortable" onClick={() => sortBy('subcol')}>Sous-collection{arrow('subcol')}</th>
+              <th className="sortable" onClick={() => sortBy('cat')}>Catégorie{arrow('cat')}</th>
+              <th className="sortable" onClick={() => sortBy('sub')}>Sous-catégorie{arrow('sub')}</th>
+              <th className="sortable" onClick={() => sortBy('type')}>TipToe type{arrow('type')}</th>
+              <th className="sortable" onClick={() => sortBy('state')}>État{arrow('state')}</th>
+              <th className="sortable" onClick={() => sortBy('dim')}>Dimensions{arrow('dim')}</th>
+              <th className="sortable" onClick={() => sortBy('created')}>Créé le{arrow('created')}</th>
+              <th className="r sortable" onClick={() => sortBy('ht')}>Prix HT{arrow('ht')}</th>
+              <th className="r sortable" onClick={() => sortBy('ttc')}>Prix TTC{arrow('ttc')}</th>
+              <th className="c sortable" onClick={() => sortBy('active')}>Actif{arrow('active')}</th>
+              <th className="c sortable" onClick={() => sortBy('sale')}>Vendable{arrow('sale')}</th>
+              <th className="c sortable" onClick={() => sortBy('buy')}>Achetable{arrow('buy')}</th>
             </tr></thead>
             <tbody>
-              {flatRows.map(({ p, v, i }, idx) => {
+              {sortedRows.map(({ p, v, i }) => {
                 const k = vkey(p.id, i);
-                const firstOfTmpl = idx === 0 || flatRows[idx - 1].p.id !== p.id;
                 return (
-                  <tr key={k} className={'frow' + (firstOfTmpl ? ' tsep' : '')} onClick={() => setSel({ product: p, variantId: v.id })}>
+                  <tr key={k} className="frow" onClick={() => setSel({ product: p, variantId: v.id })}>
                     <td className="chk" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selVar.has(k)} onChange={() => toggleVar(k)} /></td>
-                    <td>{firstOfTmpl ? <div className="pcell">
+                    <td><div className="pcell">
                       {p.image ? <img className="thumb" src={p.image} alt="" /> : <span className="thumb ph">◆</span>}
                       <div><div className="pname">{p.name}</div>{p.code && <div className="psub">{p.code}</div>}</div>
-                    </div> : <span className="tdim">↳</span>}</td>
+                    </div></td>
                     <td className="code">{v.sku}</td>
                     <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
                     <td className="hcol">{p.superCat ? cap(p.superCat) : '—'}</td>
@@ -394,7 +428,7 @@ const ProductsView: React.FC<{
                   </tr>
                 );
               })}
-              {!flatRows.length && <tr><td colSpan={18} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!sortedRows.length && <tr><td colSpan={18} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>

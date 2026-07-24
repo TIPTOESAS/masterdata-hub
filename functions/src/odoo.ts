@@ -64,15 +64,29 @@ const EXPORT_LABELS = [
   'Weight (variant)', 'Assembly type', 'Average supply time', 'Average delivery time', 'Flatpack',
 ];
 
-// Export au format Odoo (via export_data : m2o -> display, selection -> label) pour des variantes données.
-export async function exportVariants(cfg: OdooConfig, ids: number[]): Promise<{ headers: string[]; rows: any[][] }> {
-  if (!ids.length) return { headers: [], rows: [] };
+// Export au format Odoo (via export_data), stylisé (police 9, en-tête gras, colonnes ajustées).
+export async function exportVariants(cfg: OdooConfig, ids: number[]): Promise<{ filename: string; b64: string }> {
   const fg: any = await execute(cfg, 'product.product', 'fields_get', [], { attributes: ['string'] });
   const byLabel: Record<string, string> = {};
   for (const name in fg) { const s = fg[name]?.string; if (s && !(s in byLabel)) byLabel[s] = name; }
   const cols = EXPORT_LABELS.map((l) => ({ label: l, field: byLabel[l] })).filter((c) => c.field);
   const res: any = await execute(cfg, 'product.product', 'export_data', [ids, cols.map((c) => c.field)]);
-  return { headers: cols.map((c) => c.label), rows: res?.datas || [] };
+  const headers = cols.map((c) => c.label);
+  const rows: any[][] = res?.datas || [];
+
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Product');
+  ws.addRow(headers);
+  rows.forEach((r) => ws.addRow(r));
+  ws.eachRow((row: any, n: number) => row.eachCell({ includeEmpty: true }, (cell: any) => { cell.font = { size: 9, bold: n === 1 }; }));
+  ws.columns.forEach((col: any, idx: number) => {
+    let max = String(headers[idx] ?? '').length;
+    rows.forEach((r) => { const l = String(r[idx] ?? '').length; if (l > max) max = l; });
+    col.width = Math.min(Math.max(max + 2, 8), 55);
+  });
+  const buf = await wb.xlsx.writeBuffer();
+  return { filename: `masterdata-export-${ids.length}.xlsx`, b64: Buffer.from(buf).toString('base64') };
 }
 
 // data: URL à partir d'un base64 Odoo (détection du format sur la signature).

@@ -39,9 +39,9 @@ export const writeManyOdoo = async (payload: { model: string; ids: number[]; val
   return call<{ ok: boolean; count: number }>('odooWriteMany', payload);
 };
 
-// Export format Odoo (headers + rows) pour des variantes (product.product) données.
-export const fetchExport = async (ids: number[]): Promise<{ headers: string[]; rows: any[][] }> => {
-  return call<{ headers: string[]; rows: any[][] }>('odooExportVariants', { ids });
+// Export format Odoo : xlsx stylisé (base64) pour des variantes (product.product) données.
+export const fetchExport = async (ids: number[]): Promise<{ filename: string; b64: string }> => {
+  return call<{ filename: string; b64: string }>('odooExportVariants', { ids });
 };
 
 // --- échantillon minimal (extrait réel base test) pour le dev sans backend ---
