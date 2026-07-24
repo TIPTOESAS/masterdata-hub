@@ -385,7 +385,7 @@ const ProductsView: React.FC<{
                           <input type="checkbox" checked={selVar.has(vkey(p.id, i))} onChange={() => toggleVar(vkey(p.id, i))} /></td>
                         <td className="exp"></td>
                         <td className="code">{v.sku}</td>
-                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}{v.barcode && <span className="ean" style={{ marginLeft: 8 }}>EAN {v.barcode}</span>}</td>
+                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
                         <td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td>
                         <td></td>
                         <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
