@@ -205,7 +205,7 @@ const ProductsView: React.FC<{
 
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
     id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui',
-    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: p.supplier, barcode: p.barcode, price: p.price,
+    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: p.supplier, externalId: '', barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
@@ -650,6 +650,7 @@ const VariantBody: React.FC<{ variant: Variant; fld: any; tog: any; product: Pro
               {fld('Flatpack', 'flatpack', v.flatpack, { select: ['', 'yes', 'no'], hint: 'x_studio_flatpack' })}
               {fld('Gamme / Famille Spidy', 'spidy', v.spidy, { hint: 'x_studio_gamme_famille_spidy' })}
               {fld('Fournisseur par défaut', 'supplier', v.supplier, { hint: 'x_studio_char_field_6T0cm' })}
+              {fld('External ID (Odoo)', 'externalId', v.externalId, { hint: 'ir.model.data', ro: true })}
             </div>
             <div className="sectitle" style={{ marginTop: 18 }}>Code-barres</div>
             <div className="bcbox"><Barcode value={v.barcode} /></div>

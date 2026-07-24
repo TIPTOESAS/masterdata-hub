@@ -89,8 +89,15 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
     avs.forEach((a) => (avNames[a.id] = a.name));
   }
 
-  // pricing par variante
   const varIds = variants.map((v: any) => v.id);
+
+  // external id (ir.model.data) par variante — utile pour export / intégrations
+  const extRecs: any[] = varIds.length ? await execute(cfg, 'ir.model.data', 'search_read',
+    [[['model', '=', 'product.product'], ['res_id', 'in', varIds]]], { fields: ['res_id', 'module', 'name'] }) : [];
+  const extByVar: Record<number, string> = {};
+  extRecs.forEach((e) => { extByVar[e.res_id] = `${e.module}.${e.name}`; });
+
+  // pricing par variante
   const items: any[] = varIds.length ? await execute(cfg, 'product.pricelist.item', 'search_read',
     [[['pricelist_id', 'in', [PL_PUBLIC, PL_WHOLESALE, PL_USD]], ['product_id', 'in', varIds]]],
     { fields: ['pricelist_id', 'product_id', 'fixed_price', 'compute_price'] }) : [];
@@ -131,6 +138,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       nextSupplyQty: v.x_next_supply_qty || 0,
       nextSupplyDate: v.x_next_supply_date || '',
       supplier: v.x_studio_char_field_6T0cm || '',
+      externalId: extByVar[v.id] || '',
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,

@@ -12,6 +12,7 @@ export interface Variant {
   nextSupplyQty: number;    // x_next_supply_qty (Qté prochaine appro 2.0)
   nextSupplyDate: string;   // x_next_supply_date (Prochaine appro 2.0)
   supplier: string;         // x_studio_char_field_6T0cm (Default Supplier)
+  externalId: string;       // external id Odoo (ir.model.data: module.name)
   price: number;            // lst_price
   cost: number;             // standard_price
   weight: number;
