@@ -338,13 +338,15 @@ const ProductsView: React.FC<{
         <div className="tablewrap">
           <table>
             <thead><tr>
-              <th style={{ width: 30 }}></th><th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th><th>Hiérarchie</th>
-              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
+              <th style={{ width: 30 }}></th><th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th>
+              <th>Super-cat.</th><th>Collection</th><th>Sous-collection</th><th>Catégorie</th><th>Sous-catégorie</th>
+              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix HT</th><th className="r">Prix TTC</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
             </tr></thead>
             <tbody>
               {list.map((p) => {
                 const vsPairs = effVariants(p).map((v, i) => ({ v, i })).filter(({ v }) => variantMatch(v));
                 const open = expanded.has(p.id) || (q.length >= 2 && vsPairs.some(({ v }) => (v.sku + ' ' + v.barcode).toLowerCase().includes(q)));
+                const ht = vsPairs.length ? pubPrice(vsPairs[0].v) : p.price;
                 return (
                   <React.Fragment key={p.id}>
                     <tr className={'trow' + (open ? ' open' : '')}
@@ -362,12 +364,17 @@ const ProductsView: React.FC<{
                         {p.image ? <img className="thumb" src={p.image} alt="" /> : <span className="thumb ph">◆</span>}
                         <div><div className="pname">{p.name}</div>{p.nameEn !== p.name && <div className="psub">{p.nameEn}</div>}</div>
                       </div></td>
-                      <td><span className="hchip col">{p.collection || '—'}</span> {p.cat && <span className="hchip">{p.cat}</span>}</td>
+                      <td className="hcol">{p.superCat ? cap(p.superCat) : '—'}</td>
+                      <td className="hcol">{p.collection ? cap(p.collection) : '—'}</td>
+                      <td className="hcol">{p.subcol ? cap(p.subcol) : '—'}</td>
+                      <td className="hcol">{p.cat ? cap(p.cat) : '—'}</td>
+                      <td className="hcol">{p.sub ? cap(p.sub) : '—'}</td>
                       <td>{p.tiptoeType ? <span className="tt" style={ttStyle(p.tiptoeType)}>{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
                       <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
                       <td className="dim">{p.dim || '—'}</td>
                       <td className="r"><span className="vcount">{vsPairs.length}</span></td>
-                      <td className="r price">{money(vsPairs.length ? pubPrice(vsPairs[0].v) : p.price)}</td>
+                      <td className="r price">{money(ht)}</td>
+                      <td className="r price ttc">{money(ht * 1.2)}</td>
                       <td className="c">{flag(p.active)}</td>
                       <td className="c">{flag(p.saleOk)}</td>
                       <td className="c">{flag(p.buyOk)}</td>
@@ -378,13 +385,14 @@ const ProductsView: React.FC<{
                           <input type="checkbox" checked={selVar.has(vkey(p.id, i))} onChange={() => toggleVar(vkey(p.id, i))} /></td>
                         <td className="exp"></td>
                         <td className="code">{v.sku}</td>
-                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
-                        <td>{v.barcode ? <span className="ean">EAN {v.barcode}</span> : <span className="ean" style={{ color: 'var(--faint)' }}>—</span>}</td>
+                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}{v.barcode && <span className="ean" style={{ marginLeft: 8 }}>EAN {v.barcode}</span>}</td>
+                        <td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td>
                         <td></td>
                         <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
                         <td className="dim">{v.dimVariant || '—'}</td>
                         <td></td>
                         <td className="r price">{money(pubPrice(v))}</td>
+                        <td className="r price ttc">{money(pubPrice(v) * 1.2)}</td>
                         <td className="c"></td><td className="c"></td>
                         <td className="r"><span className="vopen">détail ›</span></td>
                       </tr>
@@ -392,7 +400,7 @@ const ProductsView: React.FC<{
                   </React.Fragment>
                 );
               })}
-              {!list.length && <tr><td colSpan={13} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!list.length && <tr><td colSpan={18} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>
