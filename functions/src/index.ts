@@ -1,7 +1,7 @@
 import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
-import { listProducts, listBoms, getTranslations, writeRecord, writeRecords, OdooConfig } from './odoo';
+import { listProducts, listBoms, getTranslations, writeRecord, writeRecords, exportVariants, OdooConfig } from './odoo';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 5, memory: '1GiB', timeoutSeconds: 300 });
 
@@ -53,6 +53,13 @@ export const odooTranslations = onCall({ secrets }, async (req) => {
   const id = Number(req.data?.tmplId);
   if (!id) throw new HttpsError('invalid-argument', 'tmplId requis');
   return getTranslations(cfg(), id);
+});
+
+export const odooExportVariants = onCall({ secrets }, async (req) => {
+  guard(req);
+  const ids = Array.isArray(req.data?.ids) ? req.data.ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n)) : [];
+  if (!ids.length) throw new HttpsError('invalid-argument', 'ids[] requis');
+  return exportVariants(cfg(), ids);
 });
 
 export const odooWrite = onCall({ secrets }, async (req) => {

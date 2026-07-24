@@ -51,8 +51,29 @@ const VAR_FIELDS = [
   'x_studio_country_of_origin_variant', 'x_studio_diameter', 'x_studio_dimensions_packed',
   'x_studio_flatpack', 'x_studio_gamme_famille_spidy', 'x_studio_product_state',
   'x_studio_saleable_in_wholesale', 'x_available_qty', 'x_next_supply_qty', 'x_next_supply_date',
-  'x_studio_char_field_6T0cm',
+  'x_studio_char_field_6T0cm', 'create_date',
 ];
+
+// Libellés exacts de l'export Odoo « Product (product.product) » à répliquer, dans l'ordre.
+const EXPORT_LABELS = [
+  'Available in b2b', 'Internal Reference', 'Barcode', 'Name', 'Display Name', 'Category', 'Subcategory',
+  'Collection', 'Sous-collection', 'Variant Values', 'Variant material', 'Product Category', 'TipToe Type',
+  'Country of Origin (variant)', 'Detailed countries of origin', 'HS code (variant)', 'Code ecopart',
+  'Ecopart unitaire HT', 'Labels', 'Lacquers', 'Fire resistance', 'Standard EURO', 'EPD', 'VOC', 'FSC - PEFC',
+  'Guarantee', 'Recycled material', 'Dimensions (variant)', 'Dimensions packed', 'Seat height', 'Diameter',
+  'Weight (variant)', 'Assembly type', 'Average supply time', 'Average delivery time', 'Flatpack',
+];
+
+// Export au format Odoo (via export_data : m2o -> display, selection -> label) pour des variantes données.
+export async function exportVariants(cfg: OdooConfig, ids: number[]): Promise<{ headers: string[]; rows: any[][] }> {
+  if (!ids.length) return { headers: [], rows: [] };
+  const fg: any = await execute(cfg, 'product.product', 'fields_get', [], { attributes: ['string'] });
+  const byLabel: Record<string, string> = {};
+  for (const name in fg) { const s = fg[name]?.string; if (s && !(s in byLabel)) byLabel[s] = name; }
+  const cols = EXPORT_LABELS.map((l) => ({ label: l, field: byLabel[l] })).filter((c) => c.field);
+  const res: any = await execute(cfg, 'product.product', 'export_data', [ids, cols.map((c) => c.field)]);
+  return { headers: cols.map((c) => c.label), rows: res?.datas || [] };
+}
 
 // data: URL à partir d'un base64 Odoo (détection du format sur la signature).
 function imgDataUrl(b64: string | false): string {
@@ -139,6 +160,7 @@ export async function listProducts(cfg: OdooConfig, opts: { limit?: number; doma
       nextSupplyDate: v.x_next_supply_date || '',
       supplier: v.x_studio_char_field_6T0cm || '',
       externalId: extByVar[v.id] || '',
+      createdOn: (v.create_date || '').slice(0, 10),
       barcode: v.barcode || '',
       price: v.lst_price || 0,
       cost: v.standard_price || 0,

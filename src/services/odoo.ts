@@ -39,6 +39,11 @@ export const writeManyOdoo = async (payload: { model: string; ids: number[]; val
   return call<{ ok: boolean; count: number }>('odooWriteMany', payload);
 };
 
+// Export format Odoo (headers + rows) pour des variantes (product.product) données.
+export const fetchExport = async (ids: number[]): Promise<{ headers: string[]; rows: any[][] }> => {
+  return call<{ headers: string[]; rows: any[][] }>('odooExportVariants', { ids });
+};
+
 // --- échantillon minimal (extrait réel base test) pour le dev sans backend ---
 const SAMPLE: Product[] = [
   {
@@ -51,10 +56,10 @@ const SAMPLE: Product[] = [
     tiptoeRef: 'LOU-STOOL-UC', tiptoeType: 'Finished good', tiptoeTypeDetail: 'Stool',
     launch: '2025-03-14', woo: 'wc_20481',
     variants: [
-      { id: 97040, sku: 'KST045S21UC126', attr: 'ice cream beige', color: '#ecdcc0', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', barcode: '3701499936173', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
-      { id: 97041, sku: 'KST045S21UC226', attr: 'chocolate brown', color: '#5a3a26', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', barcode: '3701499936180', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
-      { id: 97042, sku: 'KST045S21UC526', attr: 'astral purple', color: '#5b4a86', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', barcode: '3701499936159', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
-      { id: 97043, sku: 'KST045S21UC826', attr: 'magma orange', color: '#d4691f', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', barcode: '3701499936166', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
+      { id: 97040, sku: 'KST045S21UC126', attr: 'ice cream beige', color: '#ecdcc0', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', createdOn: '2025-03-14', barcode: '3701499936173', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
+      { id: 97041, sku: 'KST045S21UC226', attr: 'chocolate brown', color: '#5a3a26', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', createdOn: '2025-03-14', barcode: '3701499936180', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
+      { id: 97042, sku: 'KST045S21UC526', attr: 'astral purple', color: '#5b4a86', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', createdOn: '2025-03-14', barcode: '3701499936159', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
+      { id: 97043, sku: 'KST045S21UC826', attr: 'magma orange', color: '#d4691f', state: 'prod', b2b: true, availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: 'Plasturgie Venezia', externalId: '', createdOn: '2025-03-14', barcode: '3701499936166', price: 157.5, cost: 43.69, weight: 1, volume: 0, dimVariant: '450×300×300mm', hsVariant: '94014100', origin: 'Bulgaria', diameter: 'Ø300mm', dimPacked: '600×360×90mm', flatpack: 'yes', spidy: 'F0', pricePublic: 165.83, priceWholesale: 94.53, priceUsd: 320 },
     ],
   },
 ];

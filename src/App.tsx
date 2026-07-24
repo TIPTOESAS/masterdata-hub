@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import JsBarcode from 'jsbarcode';
 import { jsPDF } from 'jspdf';
 import { onAuthChange, signOutUser } from './services/auth';
-import { fetchProducts, fetchBoms, writeOdoo, writeManyOdoo } from './services/odoo';
+import { fetchProducts, fetchBoms, writeOdoo, writeManyOdoo, fetchExport } from './services/odoo';
 import { Product, Variant, Bom } from './types';
 import { colorFor } from './colors';
 import { materialFor } from './materials';
@@ -163,10 +163,10 @@ const ProductsView: React.FC<{
 }> = ({ products, setProducts, q, isAdmin }) => {
   const [sets, setSets] = useState<Record<FKey, Set<string>>>(emptySets());
   const [status, setStatus] = useState('active');
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [sel, setSel] = useState<Product | null>(null);
+  const [sel, setSel] = useState<{ product: Product; variantId: number | null } | null>(null);
   const [selVar, setSelVar] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
 
@@ -205,14 +205,14 @@ const ProductsView: React.FC<{
 
   const effVariants = (p: Product): Variant[] => p.variants.length ? p.variants : [{
     id: p.id, sku: p.code || '—', attr: 'variante unique', color: '#ccd1d8', state: p.productState, b2b: p.b2b === 'Oui',
-    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: p.supplier, externalId: '', barcode: p.barcode, price: p.price,
+    availQty: 0, nextSupplyQty: 0, nextSupplyDate: '', supplier: p.supplier, externalId: '', createdOn: '', barcode: p.barcode, price: p.price,
     cost: p.cost, weight: p.weight, volume: p.volume, dimVariant: p.dim, hsVariant: p.hs, origin: p.origin,
     diameter: '', dimPacked: '', flatpack: '', spidy: '', pricePublic: null, priceWholesale: null, priceUsd: null,
   }];
 
   const applyWrite = (updated: Product) => {
     setProducts((products || []).map((p) => (p.id === updated.id ? updated : p)));
-    setSel(updated);
+    setSel((s) => (s ? { ...s, product: updated } : s));
   };
 
   // sélection multiple de variantes (pour impression groupée d'étiquettes)
@@ -254,6 +254,24 @@ const ProductsView: React.FC<{
     } finally { setBulkBusy(false); }
   };
 
+  // export Excel des variantes sélectionnées au format Odoo « Product (product.product) »
+  const exportSelected = async () => {
+    const ids = Array.from(new Set(selectedItems().map((x) => x.variant.id).filter(Boolean)));
+    if (!ids.length) return;
+    setExporting(true);
+    try {
+      const { headers, rows } = await fetchExport(ids);
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Product');
+      XLSX.writeFile(wb, `masterdata-export-${ids.length}.xlsx`);
+      setToast({ msg: `✓ Export de ${ids.length} variante(s)` });
+    } catch (e) {
+      setToast({ msg: '✗ Export échoué : ' + (e instanceof Error ? e.message : String(e)), err: true });
+    } finally { setExporting(false); }
+  };
+
   // codes HS existants (variantes) triés par fréquence, avec description -> aide à la saisie
   const hsOptions = useMemo(() => {
     const freq: Record<string, number> = {};
@@ -265,8 +283,11 @@ const ProductsView: React.FC<{
 
   if (!products) return <div className="loading">Chargement des produits depuis Odoo…</div>;
 
-  // variantes visibles (filtres variante appliqués) sur l'ensemble filtré
-  const variantCount = list.reduce((n, p) => n + effVariants(p).filter(variantMatch).length, 0);
+  // vue à plat : une ligne par variante visible (template en colonne), triée par template
+  const flatRows = list.flatMap((p) => effVariants(p).map((v, i) => ({ p, v, i })).filter((x) => variantMatch(x.v)));
+  const variantCount = flatRows.length;
+  const allKeys = flatRows.map((r) => vkey(r.p.id, r.i));
+  const allSelected = allKeys.length > 0 && allKeys.every((k) => selVar.has(k));
 
   const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean, order?: string[]) => {
     const counts = facetCounts(key);
@@ -320,6 +341,7 @@ const ProductsView: React.FC<{
                   <div className="menu-catcher" onClick={() => setActionsOpen(false)}></div>
                   <div className="menu-pop">
                     <button className="menu-it" onClick={() => { setActionsOpen(false); exportLabelsPdf(selectedItems()); }}>🏷️ Imprimer les étiquettes</button>
+                    <button className="menu-it" disabled={exporting} onClick={() => { setActionsOpen(false); exportSelected(); }}>{exporting ? '… Export en cours' : '⤓ Exporter (Excel — format Odoo)'}</button>
                     {isAdmin && <>
                       <div className="menu-sep"></div>
                       <button className="menu-it" disabled={bulkBusy} onClick={() => { setActionsOpen(false); setB2bBulk(true); }}>＋ Inclure dans les masterdata B2B</button>
@@ -331,82 +353,54 @@ const ProductsView: React.FC<{
                 </>}
               </div>
             )}
-            <button className="btn" onClick={() => setExpanded(expanded.size ? new Set() : new Set(list.map((p) => p.id)))}>
-              ⇕ {expanded.size ? 'Tout replier' : 'Tout déplier'}</button>
           </div>
         </div>
         <div className="tablewrap">
           <table>
             <thead><tr>
-              <th style={{ width: 30 }}></th><th style={{ width: 24 }}></th><th>Référence</th><th>Produit</th>
+              <th className="chk"><input type="checkbox" checked={allSelected} onChange={(e) => setSelVar(e.target.checked ? new Set(allKeys) : new Set())} /></th>
+              <th>Template</th><th>Référence</th><th>Variante</th>
               <th>Super-cat.</th><th>Collection</th><th>Sous-collection</th><th>Catégorie</th><th>Sous-catégorie</th>
-              <th>TipToe type</th><th>État</th><th>Dimensions</th><th className="r">Var.</th><th className="r">Prix HT</th><th className="r">Prix TTC</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
+              <th>TipToe type</th><th>État</th><th>Dimensions</th><th>Créé le</th><th className="r">Prix HT</th><th className="r">Prix TTC</th><th className="c">Actif</th><th className="c">Vendable</th><th className="c">Achetable</th>
             </tr></thead>
             <tbody>
-              {list.map((p) => {
-                const vsPairs = effVariants(p).map((v, i) => ({ v, i })).filter(({ v }) => variantMatch(v));
-                const open = expanded.has(p.id) || (q.length >= 2 && vsPairs.some(({ v }) => (v.sku + ' ' + v.barcode).toLowerCase().includes(q)));
-                const ht = vsPairs.length ? pubPrice(vsPairs[0].v) : p.price;
+              {flatRows.map(({ p, v, i }, idx) => {
+                const k = vkey(p.id, i);
+                const firstOfTmpl = idx === 0 || flatRows[idx - 1].p.id !== p.id;
                 return (
-                  <React.Fragment key={p.id}>
-                    <tr className={'trow' + (open ? ' open' : '')}
-                      onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('.exp')) {
-                          const n = new Set(expanded); n.has(p.id) ? n.delete(p.id) : n.add(p.id); setExpanded(n);
-                        } else setSel(p);
-                      }}>
-                      <td className="chk" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={vsPairs.length > 0 && vsPairs.every(({ i }) => selVar.has(vkey(p.id, i)))}
-                          onChange={(e) => setVars(p.id, vsPairs.map((x) => x.i), e.target.checked)} /></td>
-                      <td className="exp"><span className={'caret' + (open ? ' open' : '')}>▶</span></td>
-                      <td className="code">{p.code || '—'}</td>
-                      <td><div className="pcell">
-                        {p.image ? <img className="thumb" src={p.image} alt="" /> : <span className="thumb ph">◆</span>}
-                        <div><div className="pname">{p.name}</div>{p.nameEn !== p.name && <div className="psub">{p.nameEn}</div>}</div>
-                      </div></td>
-                      <td className="hcol">{p.superCat ? cap(p.superCat) : '—'}</td>
-                      <td className="hcol">{p.collection ? cap(p.collection) : '—'}</td>
-                      <td className="hcol">{p.subcol ? cap(p.subcol) : '—'}</td>
-                      <td className="hcol">{p.cat ? cap(p.cat) : '—'}</td>
-                      <td className="hcol">{p.sub ? cap(p.sub) : '—'}</td>
-                      <td>{p.tiptoeType ? <span className="tt" style={ttStyle(p.tiptoeType)}>{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
-                      <td>{p.productState ? <span className={'stbadge s-' + p.productState}>{stateLabel(p.productState)}</span> : '—'}</td>
-                      <td className="dim">{p.dim || '—'}</td>
-                      <td className="r"><span className="vcount">{vsPairs.length}</span></td>
-                      <td className="r price">{money(ht)}</td>
-                      <td className="r price ttc">{money(ht * 1.2)}</td>
-                      <td className="c">{flag(p.active)}</td>
-                      <td className="c">{flag(p.saleOk)}</td>
-                      <td className="c">{flag(p.buyOk)}</td>
-                    </tr>
-                    {open && vsPairs.map(({ v, i }) => (
-                      <tr className="vrow" key={p.id + '-' + i} onClick={() => setSel(p)}>
-                        <td className="chk" onClick={(e) => e.stopPropagation()}>
-                          <input type="checkbox" checked={selVar.has(vkey(p.id, i))} onChange={() => toggleVar(vkey(p.id, i))} /></td>
-                        <td className="exp"></td>
-                        <td className="code">{v.sku}</td>
-                        <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
-                        <td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td><td className="hcol"></td>
-                        <td></td>
-                        <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : ''}</td>
-                        <td className="dim">{v.dimVariant || '—'}</td>
-                        <td></td>
-                        <td className="r price">{money(pubPrice(v))}</td>
-                        <td className="r price ttc">{money(pubPrice(v) * 1.2)}</td>
-                        <td className="c"></td><td className="c"></td>
-                        <td className="r"><span className="vopen">détail ›</span></td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
+                  <tr key={k} className={'frow' + (firstOfTmpl ? ' tsep' : '')} onClick={() => setSel({ product: p, variantId: v.id })}>
+                    <td className="chk" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selVar.has(k)} onChange={() => toggleVar(k)} /></td>
+                    <td>{firstOfTmpl ? <div className="pcell">
+                      {p.image ? <img className="thumb" src={p.image} alt="" /> : <span className="thumb ph">◆</span>}
+                      <div><div className="pname">{p.name}</div>{p.code && <div className="psub">{p.code}</div>}</div>
+                    </div> : <span className="tdim">↳</span>}</td>
+                    <td className="code">{v.sku}</td>
+                    <td><span className="swatch" style={swatchStyle(v.attr, v.color)}></span>{v.attr}</td>
+                    <td className="hcol">{p.superCat ? cap(p.superCat) : '—'}</td>
+                    <td className="hcol">{p.collection ? cap(p.collection) : '—'}</td>
+                    <td className="hcol">{p.subcol ? cap(p.subcol) : '—'}</td>
+                    <td className="hcol">{p.cat ? cap(p.cat) : '—'}</td>
+                    <td className="hcol">{p.sub ? cap(p.sub) : '—'}</td>
+                    <td>{p.tiptoeType ? <span className="tt" style={ttStyle(p.tiptoeType)}>{p.tiptoeType}</span> : <span className="cap">—</span>}</td>
+                    <td>{v.state ? <span className={'stbadge s-' + v.state}>{stateLabel(v.state)}</span> : '—'}</td>
+                    <td className="dim">{v.dimVariant || '—'}</td>
+                    <td className="hcol">{v.createdOn || '—'}</td>
+                    <td className="r price">{money(pubPrice(v))}</td>
+                    <td className="r price ttc">{money(pubPrice(v) * 1.2)}</td>
+                    <td className="c">{flag(p.active)}</td>
+                    <td className="c">{flag(p.saleOk)}</td>
+                    <td className="c">{flag(p.buyOk)}</td>
+                  </tr>
                 );
               })}
-              {!list.length && <tr><td colSpan={18} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
+              {!flatRows.length && <tr><td colSpan={18} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>Aucun produit.</td></tr>}
             </tbody>
           </table>
         </div>
       </main>
 
-      {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} isAdmin={isAdmin} />}
+      {sel && <Drawer product={sel.product} initialVariantId={sel.variantId} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} isAdmin={isAdmin} />}
       {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
     </div>
   );
@@ -419,9 +413,13 @@ const TABS: [string, string][] = [
 ];
 const SUPERS = ['sofa', 'accessory', 'chair_and_stool', 'various', 'shelf', 'lamp', 'professional_furniture', 'table_leg', 'storage', 'table_and_desk'];
 
-const Drawer: React.FC<{ product: Product; onClose: () => void; onWrite: (p: Product) => void; hsOptions: { value: string; label: string }[]; isAdmin: boolean }> = ({ product, onClose, onWrite, hsOptions, isAdmin }) => {
+const Drawer: React.FC<{ product: Product; initialVariantId?: number | null; onClose: () => void; onWrite: (p: Product) => void; hsOptions: { value: string; label: string }[]; isAdmin: boolean }> = ({ product, initialVariantId, onClose, onWrite, hsOptions, isAdmin }) => {
   const [tab, setTab] = useState('general');
-  const [variantIdx, setVariantIdx] = useState<number | null>(null);
+  const [variantIdx, setVariantIdx] = useState<number | null>(() => {
+    if (initialVariantId == null) return null;
+    const idx = product.variants.findIndex((x) => x.id === initialVariantId);
+    return idx >= 0 ? idx : null;
+  });
   const [edits, setEdits] = useState<Edits>({});
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);

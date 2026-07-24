@@ -97,6 +97,11 @@ code{font-family:var(--mono);}
 .tablewrap{border:1px solid var(--line);border-radius:11px;overflow-x:auto;background:var(--panel);}
 .hcol{font-size:11px;color:var(--muted);text-transform:capitalize;white-space:nowrap;}
 .price.ttc{color:var(--muted);font-weight:600;}
+tr.frow{cursor:pointer;}
+tr.frow:hover{background:color-mix(in srgb,var(--accent) 5%,transparent);}
+tr.frow.tsep td{border-top:1px solid var(--line);}
+.tdim{color:var(--faint);}
+th.chk input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px;margin:0;}
 table{width:100%;border-collapse:collapse;}
 thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--faint);font-weight:700;padding:9px 12px;border-bottom:1px solid var(--line2);white-space:nowrap;}
 th.r,td.r{text-align:right;}
