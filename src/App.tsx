@@ -82,9 +82,9 @@ const FACETS: { key: FKey; label: string; scroll?: boolean; state?: boolean; ord
   { key: 'productState', label: 'Statut', state: true },
   { key: 'superCat', label: 'Super-catégorie' },
   { key: 'collection', label: 'Collection', scroll: true },
+  { key: 'subcol', label: 'Sous-collection', scroll: true },
   { key: 'cat', label: 'Catégorie', scroll: true },
   { key: 'sub', label: 'Sous-catégorie', scroll: true },
-  { key: 'subcol', label: 'Sous-collection', scroll: true },
   { key: 'supplier', label: 'Fournisseur par défaut', scroll: true },
 ];
 
@@ -265,6 +265,9 @@ const ProductsView: React.FC<{
 
   if (!products) return <div className="loading">Chargement des produits depuis Odoo…</div>;
 
+  // variantes visibles (filtres variante appliqués) sur l'ensemble filtré
+  const variantCount = list.reduce((n, p) => n + effVariants(p).filter(variantMatch).length, 0);
+
   const renderFacet = (key: FKey, label: string, scroll?: boolean, isState?: boolean, order?: string[]) => {
     const counts = facetCounts(key);
     let keys = Object.keys(counts);
@@ -304,7 +307,10 @@ const ProductsView: React.FC<{
       <main className="main">
         <div className="mhead">
           <h1>Produits</h1>
-          <span className="count">{list.length} template{list.length > 1 ? 's' : ''} · {products.length} chargés</span>
+          <span className="count">
+            <b>{list.length}</b> template{list.length > 1 ? 's' : ''} · <b>{variantCount}</b> variante{variantCount > 1 ? 's' : ''}
+            {selVar.size > 0 && <> · <b style={{ color: 'var(--accent)' }}>{selVar.size} sélectionnée{selVar.size > 1 ? 's' : ''}</b></>}
+          </span>
           <div className="actions">
             {selVar.size > 0 && (
               <div className="actions-menu">

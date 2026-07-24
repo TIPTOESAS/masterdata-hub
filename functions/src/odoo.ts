@@ -66,7 +66,7 @@ function imgDataUrl(b64: string | false): string {
 
 // Liste des templates + variantes + pricing + fournisseur par défaut.
 export async function listProducts(cfg: OdooConfig, opts: { limit?: number; domain?: any[] } = {}): Promise<any[]> {
-  const limit = opts.limit ?? 400;
+  const limit = opts.limit ?? 3000;
   const domain = opts.domain ?? [['active', '=', true]];
   const tmpls: any[] = await execute(cfg, 'product.template', 'search_read', [domain],
     { fields: TMPL_FIELDS, limit, order: 'name' });

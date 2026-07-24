@@ -39,7 +39,7 @@ const WRITABLE = new Set(['product.template', 'product.product', 'product.pricel
 
 export const odooListProducts = onCall({ secrets }, async (req) => {
   guard(req);
-  const limit = typeof req.data?.limit === 'number' ? req.data.limit : 400;
+  const limit = typeof req.data?.limit === 'number' ? req.data.limit : 3000;
   return listProducts(cfg(), { limit });
 });
 
