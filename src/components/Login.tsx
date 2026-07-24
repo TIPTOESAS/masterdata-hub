@@ -20,7 +20,7 @@ const Login: React.FC = () => {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="login-mark">◆</div>
+        <img className="login-mark" src={process.env.PUBLIC_URL + '/favicon.svg'} alt="" />
         <div className="login-title">Master Data Hub</div>
         <p className="login-sub">Hiérarchie produit · variantes · logistique · pricing · traductions · BOM</p>
         <button className="login-btn" onClick={handleLogin} disabled={loading}>

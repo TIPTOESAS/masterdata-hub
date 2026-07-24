@@ -133,7 +133,7 @@ const Hub: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="app">
       <div className="topbar">
-        <div className="logo"><span className="mark">◆</span>Master Data Hub <span className="sub">· Produits</span></div>
+        <div className="logo"><img className="mark" src={process.env.PUBLIC_URL + '/favicon.svg'} alt="" />Master Data Hub <span className="sub">· Produits</span></div>
         <div className="nav">
           <button className={view === 'products' ? 'on' : ''} onClick={() => setView('products')}>Produits</button>
           <button className={view === 'boms' ? 'on' : ''} onClick={() => setView('boms')}>Nomenclatures</button>
