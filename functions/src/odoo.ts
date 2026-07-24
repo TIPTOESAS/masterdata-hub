@@ -258,3 +258,9 @@ export async function listBoms(cfg: OdooConfig, opts: { productTmplId?: number |
 export async function writeRecord(cfg: OdooConfig, model: string, id: number, values: Record<string, any>): Promise<boolean> {
   return execute(cfg, model, 'write', [[id], values]);
 }
+
+// Écriture des mêmes valeurs sur plusieurs enregistrements (write en masse).
+export async function writeRecords(cfg: OdooConfig, model: string, ids: number[], values: Record<string, any>): Promise<boolean> {
+  if (!ids.length) return false;
+  return execute(cfg, model, 'write', [ids, values]);
+}

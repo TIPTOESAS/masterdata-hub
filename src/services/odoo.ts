@@ -7,7 +7,7 @@ import { Product, Bom, WritePayload } from '../types';
 // embarqué pour que l'UI reste utilisable en dev.
 
 const call = async <T>(name: string, data: any): Promise<T> => {
-  const fn = httpsCallable(functions, name);
+  const fn = httpsCallable(functions, name, { timeout: 300000 }); // 5 min (gros catalogue)
   const res = await fn(data);
   return res.data as T;
 };
@@ -32,6 +32,11 @@ export const fetchBoms = async (productTmplId?: number): Promise<Bom[]> => {
 
 export const writeOdoo = async (payload: WritePayload): Promise<{ ok: boolean }> => {
   return call<{ ok: boolean }>('odooWrite', payload);
+};
+
+// Écriture en masse : mêmes valeurs sur plusieurs enregistrements.
+export const writeManyOdoo = async (payload: { model: string; ids: number[]; values: Record<string, any> }): Promise<{ ok: boolean; count: number }> => {
+  return call<{ ok: boolean; count: number }>('odooWriteMany', payload);
 };
 
 // --- échantillon minimal (extrait réel base test) pour le dev sans backend ---

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import JsBarcode from 'jsbarcode';
 import { jsPDF } from 'jspdf';
 import { onAuthChange, signOutUser } from './services/auth';
-import { fetchProducts, fetchBoms, writeOdoo } from './services/odoo';
+import { fetchProducts, fetchBoms, writeOdoo, writeManyOdoo } from './services/odoo';
 import { Product, Variant, Bom } from './types';
 import { colorFor } from './colors';
 import { materialFor } from './materials';
@@ -166,6 +166,9 @@ const ProductsView: React.FC<{
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sel, setSel] = useState<Product | null>(null);
   const [selVar, setSelVar] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const toggle = (key: FKey, v: string) => {
     setSets((s) => { const n = { ...s, [key]: new Set(s[key]) }; n[key].has(v) ? n[key].delete(v) : n[key].add(v); return n; });
@@ -230,6 +233,27 @@ const ProductsView: React.FC<{
     return items;
   };
 
+  // inclure/exclure les variantes sélectionnées du catalogue B2B (x_studio_saleable_in_wholesale)
+  const setB2bBulk = async (value: boolean) => {
+    const ids = Array.from(new Set(selectedItems().map((x) => x.variant.id).filter(Boolean)));
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      await writeManyOdoo({ model: 'product.product', ids, values: { x_studio_saleable_in_wholesale: value } });
+      const idSet = new Set(ids);
+      setProducts((products || []).map((p) => {
+        let changed = false;
+        const vs = p.variants.map((v) => (idSet.has(v.id) ? ((changed = true), { ...v, b2b: value }) : v));
+        if (!changed) return p;
+        return { ...p, variants: vs, b2b: vs.some((v) => v.b2b) ? 'Oui' : 'Non' };
+      }));
+      setToast({ msg: `✓ ${ids.length} variante(s) ${value ? 'incluses dans' : 'exclues des'} masterdata B2B` });
+      setSelVar(new Set());
+    } catch (e) {
+      setToast({ msg: '✗ Échec écriture : ' + (e instanceof Error ? e.message : String(e)), err: true });
+    } finally { setBulkBusy(false); }
+  };
+
   // codes HS existants (variantes) triés par fréquence, avec description -> aide à la saisie
   const hsOptions = useMemo(() => {
     const freq: Record<string, number> = {};
@@ -282,10 +306,25 @@ const ProductsView: React.FC<{
           <h1>Produits</h1>
           <span className="count">{list.length} template{list.length > 1 ? 's' : ''} · {products.length} chargés</span>
           <div className="actions">
-            {selVar.size > 0 && <>
-              <button className="btn primary" onClick={() => exportLabelsPdf(selectedItems())}>⬇ Imprimer {selVar.size} étiquette{selVar.size > 1 ? 's' : ''}</button>
-              <button className="btn" onClick={() => setSelVar(new Set())}>Désélectionner</button>
-            </>}
+            {selVar.size > 0 && (
+              <div className="actions-menu">
+                <button className="btn primary" onClick={() => setActionsOpen((o) => !o)}>
+                  ⚙ {selVar.size} sélectionnée{selVar.size > 1 ? 's' : ''} ▾</button>
+                {actionsOpen && <>
+                  <div className="menu-catcher" onClick={() => setActionsOpen(false)}></div>
+                  <div className="menu-pop">
+                    <button className="menu-it" onClick={() => { setActionsOpen(false); exportLabelsPdf(selectedItems()); }}>🏷️ Imprimer les étiquettes</button>
+                    {isAdmin && <>
+                      <div className="menu-sep"></div>
+                      <button className="menu-it" disabled={bulkBusy} onClick={() => { setActionsOpen(false); setB2bBulk(true); }}>＋ Inclure dans les masterdata B2B</button>
+                      <button className="menu-it" disabled={bulkBusy} onClick={() => { setActionsOpen(false); setB2bBulk(false); }}>－ Exclure des masterdata B2B</button>
+                    </>}
+                    <div className="menu-sep"></div>
+                    <button className="menu-it" onClick={() => { setActionsOpen(false); setSelVar(new Set()); }}>Désélectionner</button>
+                  </div>
+                </>}
+              </div>
+            )}
             <button className="btn" onClick={() => setExpanded(expanded.size ? new Set() : new Set(list.map((p) => p.id)))}>
               ⇕ {expanded.size ? 'Tout replier' : 'Tout déplier'}</button>
           </div>
@@ -354,6 +393,7 @@ const ProductsView: React.FC<{
       </main>
 
       {sel && <Drawer product={sel} onClose={() => setSel(null)} onWrite={applyWrite} hsOptions={hsOptions} isAdmin={isAdmin} />}
+      {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
     </div>
   );
 };

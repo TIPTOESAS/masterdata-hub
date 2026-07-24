@@ -1,9 +1,9 @@
 import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
-import { listProducts, listBoms, getTranslations, writeRecord, OdooConfig } from './odoo';
+import { listProducts, listBoms, getTranslations, writeRecord, writeRecords, OdooConfig } from './odoo';
 
-setGlobalOptions({ region: 'europe-west1', maxInstances: 5 });
+setGlobalOptions({ region: 'europe-west1', maxInstances: 5, memory: '1GiB', timeoutSeconds: 300 });
 
 const ODOO_URL = defineSecret('ODOO_URL');
 const ODOO_DB = defineSecret('ODOO_DB');
@@ -62,4 +62,14 @@ export const odooWrite = onCall({ secrets }, async (req) => {
   if (!id || typeof values !== 'object') throw new HttpsError('invalid-argument', 'id/values requis');
   const ok = await writeRecord(cfg(), model, Number(id), values);
   return { ok };
+});
+
+export const odooWriteMany = onCall({ secrets }, async (req) => {
+  guardAdmin(req);
+  const { model, ids, values } = req.data || {};
+  if (!WRITABLE.has(model)) throw new HttpsError('invalid-argument', `Modèle non autorisé: ${model}`);
+  if (!Array.isArray(ids) || !ids.length || typeof values !== 'object') throw new HttpsError('invalid-argument', 'ids[]/values requis');
+  const clean = ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n));
+  const ok = await writeRecords(cfg(), model, clean, values);
+  return { ok, count: clean.length };
 });
